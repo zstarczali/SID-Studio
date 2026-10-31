@@ -987,6 +987,7 @@ button:focus-visible {
 .sid-hdr .ed-file-menu { z-index: 40; left: 0; right: auto; }
 .sid-title { font-family: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
 .sid-hdr .sid-xbtn { margin-left: auto; }
+.sid-tune-title { min-width: 0; font-size: 0.78rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sid-engine-name { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sid-xbtn { background: none; border: none; color: var(--secondary); font-size: 1.3rem; cursor: pointer; padding: 0; line-height: 1; min-height: 0; height: 28px; width: 28px; }
 .sid-xbtn:hover { color: var(--text); }
@@ -1297,6 +1298,70 @@ button:focus-visible {
 .websid-play-tool:focus-visible[aria-label]::after {
   opacity: 1;
 }
+/* Toolbar tooltips. The toolbar rises only while the pointer is on it, so the windows below do not hide them. */
+#app-toolbar { position: relative; }
+#app-toolbar:hover,
+#app-toolbar:focus-within { z-index: 20000; }
+#app-toolbar .main-tb-icon-btn[aria-label],
+#app-toolbar #theme-toggle[aria-label] {
+  position: relative;
+}
+#app-toolbar .main-tb-icon-btn[aria-label]::after,
+#app-toolbar #theme-toggle[aria-label]::after {
+  content: attr(aria-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease 0.35s;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+#app-toolbar .main-tb-icon-btn:hover[aria-label]::after,
+#app-toolbar .main-tb-icon-btn:focus-visible[aria-label]::after,
+#app-toolbar #theme-toggle:hover[aria-label]::after,
+#app-toolbar #theme-toggle:focus-visible[aria-label]::after {
+  opacity: 1;
+}
+#theme-picker[open] #theme-toggle[aria-label]::after { display: none; }
+/* the close buttons of the floating windows: at the right edge, so the tooltip grows to the left */
+#websid-play-close[aria-label],
+#sid-viz-close[aria-label] { position: relative; }
+#websid-play-close[aria-label]::after,
+#sid-viz-close[aria-label]::after {
+  content: attr(aria-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease 0.35s;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+#websid-play-close:hover[aria-label]::after,
+#websid-play-close:focus-visible[aria-label]::after,
+#sid-viz-close:hover[aria-label]::after,
+#sid-viz-close:focus-visible[aria-label]::after { opacity: 1; }
 #sid-editor-dialog button[aria-label] {
   position: relative;
 }
@@ -1816,10 +1881,15 @@ html[data-theme="c64"] .websid-play-item--current .websid-play-item-fav:not(.web
 html[data-theme="c64"] .websid-play-item--current .websid-play-item-del {
   color: #40318d;
 }
-dialog.dlg-active[open]:not(:modal) > :first-child {
+dialog.dlg-active[open]:not(:modal) > :first-child,
+.sid-vkbd-dialog.dlg-active > :first-child,
+.sid-trk-float.dlg-active,
+dialog[open]:modal > :first-child {
   box-shadow: 0 0 0 1px var(--primary), 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
-dialog.dlg-active[open]:not(:modal) > :first-child > :first-child {
+dialog.dlg-active[open]:not(:modal) > :first-child > :first-child,
+.sid-vkbd-dialog.dlg-active > :first-child > :first-child,
+.sid-trk-float.dlg-active > :first-child {
   background: color-mix(in srgb, var(--primary) 20%, var(--panel-strong));
 }
 .sid-viz-card {
@@ -1844,3 +1914,93 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
 .app-settings-card { min-width: 340px; }
 .app-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0; font-size: 0.82rem; }
 .app-settings-row .sid-select { width: 190px; flex: 0 0 190px; }
+
+/* Splash, the same as the Visual Assembler's */
+html:has(#splash-screen) { overflow: hidden; }
+.splash-screen {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: var(--bg);
+  z-index: 30000;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+  display: flex; align-items: center; justify-content: center;
+}
+.splash-screen.fade-out { opacity: 0; pointer-events: none; }
+.splash-panel {
+  background: #070241;
+  width: 640px; max-width: 92vw;
+  height: 480px; max-height: 90vh;
+  padding: 18px 32px 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--text) 22%, var(--panel));
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.62), 0 8px 24px rgba(0, 0, 0, 0.36);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+.splash-panel.ready { opacity: 1; }
+[data-theme="light"] .splash-panel,
+[data-theme="starlight"] .splash-panel,
+[data-theme="beige"] .splash-panel { border-color: color-mix(in srgb, var(--text) 45%, var(--panel)); }
+.splash-image {
+  flex: 0 0 auto;
+  width: min(450px, calc(92vw - 64px));
+  max-width: 100%; max-height: 340px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+.splash-loader {
+  position: relative; top: -30px;
+  width: 100%; height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin: 0;
+  overflow: hidden;
+}
+.splash-loader-bar {
+  width: 100%; height: 100%;
+  background: #7a8dff;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+.splash-panel.ready .splash-loader-bar { animation: splash-loading 2.4s ease-out forwards; }
+html[data-theme="commodore77"] .splash-loader-bar { background: #fcee0a; }
+html[data-theme="starlight"] .splash-loader-bar { background: var(--sl-rainbow); }
+html[data-theme="beige"] .splash-loader-bar { background: var(--c64-badge); }
+html[data-theme="c64"] .splash-loader-bar { background: #a59bf0; }
+@keyframes splash-loading { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+.splash-version {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem; font-weight: 400;
+  color: rgba(255, 255, 255, 0.55);
+  margin: -2px 0 0;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.splash-powered { display: flex; align-items: center; gap: 8px; margin-top: -2px; opacity: 0.75; }
+.splash-powered span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+}
+.splash-ready {
+  font-family: "C64Pro", monospace;
+  font-size: 1.1rem;
+  color: #aaa4ff;
+  letter-spacing: 0.05em;
+  min-height: 1.25em;
+  margin-top: 0;
+}
+.splash-cursor {
+  display: inline-block;
+  width: 0.875em; height: 0.875em;
+  vertical-align: baseline;
+  background: currentColor;
+  animation: splash-cursor-blink 0.6s step-end infinite;
+  opacity: 0;
+}
+@keyframes splash-cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }

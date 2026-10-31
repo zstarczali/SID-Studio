@@ -4655,7 +4655,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "va-sid-editor"
+name = "va-sid-studio"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",

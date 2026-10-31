@@ -1,5 +1,5 @@
 {
-  "name": "va-sid-editor",
+  "name": "va-sid-studio",
   "version": "1.0.0",
   "description": "Commodore 64 SID player and tracker, extracted from C64 Visual Assembler.",
   "author": "Zsolt Tarczali",

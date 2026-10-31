@@ -3,20 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VA SID Editor</title>
-  <script>document.documentElement.dataset.theme=localStorage.getItem('c64-block-theme')||'dark';</script>
+  <title>VA SID Studio</title>
+  <script>(function(){var t=localStorage.getItem('c64-block-theme')||'dark';document.documentElement.dataset.theme=t;document.documentElement.style.background={'dark':'#1a1b26','oled':'#0d0d12','black':'#000000','commodore77':'#0a0a08','starlight':'#f4f1fa','beige':'#e4ddd0','c64':'#7869c4','light':'#e8ecf1'}[t]||'#1a1b26';})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="splash-screen" class="splash-screen">
+    <div class="splash-panel">
+      <img class="splash-image" src="assets/splash.png" alt="VA SID Studio">
+      <div class="splash-loader"><div class="splash-loader-bar"></div></div>
+      <div class="splash-ready" aria-live="polite"><span id="splash-ready-text"></span><span class="splash-cursor" aria-hidden="true"></span></div>
+      <p class="splash-version" id="splash-version"></p>
+      <div class="splash-powered"><span>Powered by Visual Macro Assembler &amp; VA SID Core</span></div>
+    </div>
+  </div>
   <header id="app-toolbar">
     <button id="sid-player-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="SID Player" aria-pressed="false">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M6 12V3.5l7-1.5V10.5"/><circle cx="4.3" cy="12" r="1.8"/><circle cx="11.3" cy="10.5" r="1.8"/></svg>
           </button>
     <button id="sid-editor-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="SID Editor">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M1.5 8.5h2l1.5-5 2.5 10 2-7 1.5 4h3.5"/></svg>
+          </button>
+    <button id="app-new-tune-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="New tune">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M9.5 1.5H4a1 1 0 00-1 1v11a1 1 0 001 1h8a1 1 0 001-1V5z"/><path d="M9.5 1.5V5H13"/><path d="M8 7.5v5M5.5 10h5"/></svg>
           </button>
     <details class="theme-picker-menu" id="theme-picker">
                   <summary id="theme-toggle" class="secondary icon-button theme-toggle-button" aria-label="Dark mode">
@@ -161,6 +173,7 @@
         <div class="ed-file">
           <button class="ed-file-btn" type="button">Files ▾</button>
           <div class="ed-file-menu" hidden>
+            <button id="sid-new-tune" type="button">New tune</button>
             <button id="sid-load-bin" type="button">Load .bin…</button>
             <button id="sid-save-bin" type="button">Save .bin…</button>
             <button id="sid-import-goat" type="button">Import GoatTracker .sng…</button>
@@ -174,8 +187,10 @@
           <input type="file" id="sid-sng-file" accept=".sng" hidden>
           <input type="file" id="sid-sid-file" accept=".sid" hidden>
         </div>
+        <button id="sid-new-tune-btn" class="ed-file-btn" type="button">New tune</button>
         <span class="sid-title">SID EDITOR</span>
         <span id="sid-engine-name" class="sid-engine-name"></span>
+        <span id="sid-tune-title" class="sid-tune-title"></span>
         <button id="sid-close" class="sid-xbtn" type="button" aria-label="Close">×</button>
       </div>
       <div class="sid-body">

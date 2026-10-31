@@ -1,11 +1,11 @@
 [package]
-name = "va-sid-editor"
+name = "va-sid-studio"
 version = "1.0.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
 [lib]
-name = "va_sid_editor_lib"
+name = "va_sid_studio_lib"
 crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]

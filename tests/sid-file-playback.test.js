@@ -22,6 +22,7 @@ test("stopping for an external SID does not preload the editor stream", () => {
   let preloads = 0, externalStops = 0, webSidPauses = 0;
   const ctx = {
     _sidTimer: null,
+    _sidPlaybackUsingWebSid: false,
     _sidExternalCore: {},
     _sidWaStop() {},
     _sidExternalCoreStop() { externalStops++; },
@@ -43,6 +44,33 @@ test("stopping for an external SID does not preload the editor stream", () => {
   assert.equal(webSidPauses, 1);
   ctx.stop();
   assert.equal(preloads, 1);
+});
+
+test("Stop silences the editor's WebSID playback, without closing the SID Player", () => {
+  let enginePauses = 0, windowPauses = 0;
+  const ctx = {
+    _sidTimer: null,
+    _sidPlaybackUsingWebSid: true,
+    _webSidActive: true,
+    _sidExternalCore: null,
+    ScriptNodePlayer: { getInstance() { return { pause() { enginePauses++; } }; } },
+    _sidWaStop() {},
+    _sidStreamSilence() {},
+    _webSidPause() { windowPauses++; },
+    _sidStreamPreload() {},
+    _sidUpdatePauseButton() {},
+    _sidBuildSongList() {},
+    document: { getElementById() { return null; } },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(`${fnSource("_sidStop")}; this.stop = _sidStop;`, ctx);
+  ctx.stop();
+  assert.equal(enginePauses, 1);
+  assert.equal(windowPauses, 0);
+  assert.equal(ctx._webSidActive, false);
+  assert.equal(ctx._sidPlaybackUsingWebSid, false);
+  ctx.stop();
+  assert.equal(enginePauses, 1, "nothing of the editor is playing any more");
 });
 
 test("WebSID file playback remains available", async () => {

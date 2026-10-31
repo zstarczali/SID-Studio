@@ -1,7 +1,7 @@
 {
-  "productName": "VA SID Editor",
+  "productName": "VA SID Studio",
   "version": "1.0.0",
-  "identifier": "hu.zstarczali.vasideditor",
+  "identifier": "hu.zstarczali.vasidstudio",
   "build": {
     "frontendDist": "../www"
   },
@@ -10,7 +10,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "VA SID Editor",
+        "title": "VA SID Studio",
         "url": "index.html",
         "width": 1400,
         "height": 940,

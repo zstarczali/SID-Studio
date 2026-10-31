@@ -1,4 +1,4 @@
-// VA SID Editor. Extracted from C64 Visual Assembler (www/app.js); the sound engine, tracker and exports are the same code.
+// VA SID Studio. Extracted from C64 Visual Assembler (www/app.js); the sound engine, tracker and exports are the same code.
 
 
 let _sidPlayMode = "all";
@@ -94,9 +94,9 @@ function setupDraggableEditorDialogs() {
       dialog.style.top = rect.top + "px";
       // Measured once: reading the size on every move forced a layout after each
       // position write. The move itself is a GPU transform (no layout, no repaint
-      // of the big dialog), committed to left / top on release — except when the
-      // dialog holds fixed floating panels (SID Editor tracker / VA-VK / roll):
-      // a transform would carry them along and they would jump back.
+      // of the big dialog), committed to left / top on release. A transform on the
+      // dialog would carry its fixed floating panels (tracker / VA-VK / roll) along,
+      // so with those open only the card moves: they are its siblings.
       const floats = dialog.querySelector(".sid-trk-float:not([hidden]), .sid-vkbd-dialog:not([hidden])");
       _editorDialogDrag = {
         dialog,
@@ -105,9 +105,9 @@ function setupDraggableEditorDialogs() {
         x0: rect.left, y0: rect.top, x: rect.left, y: rect.top,
         maxX: Math.max(8, window.innerWidth - rect.width - 8),
         maxY: Math.max(8, window.innerHeight - rect.height - 8),
-        useTransform: !floats, raf: 0
+        moving: floats ? dialog.firstElementChild : dialog, raf: 0
       };
-      if (!floats) dialog.style.willChange = "transform";
+      _editorDialogDrag.moving.style.willChange = "transform";
       try { header.setPointerCapture(e.pointerId); } catch(_) {}
       e.preventDefault();
     });
@@ -119,8 +119,7 @@ function setupDraggableEditorDialogs() {
       if (d.raf) return;
       d.raf = requestAnimationFrame(function() {
         d.raf = 0;
-        if (d.useTransform) dialog.style.transform = "translate3d(" + (d.x - d.x0) + "px, " + (d.y - d.y0) + "px, 0)";
-        else { dialog.style.left = d.x + "px"; dialog.style.top = d.y + "px"; }
+        d.moving.style.transform = "translate3d(" + (d.x - d.x0) + "px, " + (d.y - d.y0) + "px, 0)";
       });
     });
     const endDrag = function(e) {
@@ -131,7 +130,8 @@ function setupDraggableEditorDialogs() {
       dialog.style.left = d.x + "px";
       dialog.style.top = d.y + "px";
       dialog.style.transform = "none";
-      dialog.style.willChange = "";
+      d.moving.style.willChange = "";
+      if (d.moving !== dialog) d.moving.style.transform = "";
       if (e && e.pointerId != null) { try { header.releasePointerCapture(e.pointerId); } catch(_) {} }
       persistPosition();
     };
@@ -813,9 +813,23 @@ function _sidSetTrackerDetached(on) {
     dock.appendChild(section);
     float.hidden = true;
   }
-  const btn = document.getElementById("sid-tracker-detach");
-  if (btn) btn.hidden = !!on;
+  _sidSyncDetachBtn();
   _sidSaveTrackerFloat({ detached: !!on });
+}
+
+function _sidTrackerIsDetached() {
+  const float = document.getElementById("sid-tracker-float");
+  return !!float && !float.hidden;
+}
+
+// One toolbar button, both directions: it stays in the tracker when that floats.
+function _sidSyncDetachBtn() {
+  const btn = document.getElementById("sid-tracker-detach");
+  if (!btn) return;
+  if (!btn._detachIcon) btn._detachIcon = btn.innerHTML;
+  const on = _sidTrackerIsDetached();
+  btn.innerHTML = on ? document.getElementById("sid-tracker-attach").innerHTML : btn._detachIcon;
+  btn.setAttribute("aria-label", t(on ? "sidTrackerAttach" : "sidTrackerDetach"));
 }
 
 /* x / y are viewport coordinates. The SID dialog is centered with a transform,
@@ -824,19 +838,31 @@ function _sidPlaceTrackerFloat(x, y) {
   return _sidPlaceFixed(document.getElementById("sid-tracker-float"), x, y);
 }
 
-// A drag moves a floating panel once per frame (the placement measures the panel);
-// _sidDragFlush applies the last position at once when the drag ends.
+// A drag moves a floating panel with a GPU transform (measured once: no layout per move);
+// _sidDragFlush commits the last position to left / top when the drag ends.
 function _sidDragTo(state, el, x, y) {
-  state.tx = x; state.ty = y;
+  if (!state.box) {
+    const r = el.getBoundingClientRect();
+    state.box = { x: r.left, y: r.top, maxX: window.innerWidth - r.width - 8, maxY: window.innerHeight - r.height - 8 };
+    el.style.willChange = "transform";
+  }
+  state.tx = Math.max(8, Math.min(x, state.box.maxX));
+  state.ty = Math.max(8, Math.min(y, state.box.maxY));
   if (state.raf) return;
-  state.raf = requestAnimationFrame(function() { state.raf = 0; state.at = _sidPlaceFixed(el, state.tx, state.ty); });
+  state.raf = requestAnimationFrame(function() {
+    state.raf = 0;
+    el.style.transform = "translate3d(" + (state.tx - state.box.x) + "px, " + (state.ty - state.box.y) + "px, 0)";
+  });
 }
 
 function _sidDragFlush(state, el) {
-  if (!state || !state.raf) return;
-  cancelAnimationFrame(state.raf);
+  if (!state || !state.box) return;
+  if (state.raf) cancelAnimationFrame(state.raf);
   state.raf = 0;
+  el.style.transform = "";
+  el.style.willChange = "";
   state.at = _sidPlaceFixed(el, state.tx, state.ty);
+  state.box = null;
 }
 
 function _sidPlaceFixed(float, x, y) {
@@ -2682,7 +2708,6 @@ function _webSidPause() {
   if (!_webSidActive) return;
   try { ScriptNodePlayer.getInstance()?.pause(); } catch(_) {}
   _webSidActive = false;
-  _webSidHideExternalDialog();
 }
 
 /* ── SID register stream: every editor preview through WebSid ─────────────
@@ -4411,8 +4436,14 @@ function _sidStop(preloadStream = true, stopExternal = false) {
   _sidWaStop();
   _sidStreamSilence();
   _sidPaused = false;
+  const editorOnWebSid = _sidPlaybackUsingWebSid;
   _sidPlaybackUsingWebSid = false;
   if (stopExternal) _webSidPause();
+  else if (editorOnWebSid) {
+    // not _webSidPause: that would also close the SID Player window
+    try { ScriptNodePlayer.getInstance()?.pause(); } catch (_) {}
+    _webSidActive = false;
+  }
   if (preloadStream) _sidStreamPreload();
   const t = document.getElementById("sid-tracker");
   if (t) t.querySelectorAll("tr.sid-playing").forEach(function(r){ r.classList.remove("sid-playing"); });
@@ -5696,7 +5727,10 @@ function _sidDumpImport(regs, meta) {
     stored[JSON.stringify(ins.table)] = true;
     tableLeft -= ins.table.length;
   });
-  finalInsts.forEach(function(ins, i){ ins.name = "SID " + String(i + 1).padStart(2, "0"); });
+  finalInsts.forEach(function(ins){
+    const wave = [ins.tri && "TRI", ins.saw && "SAW", ins.pul && "PUL", ins.noi && "NOI"].filter(Boolean).join("+") || "---";
+    ins.name = wave + (ins.table && ins.table.length ? " TAB" : "");
+  });
 
   // ── row lengths: an F effect one row ahead sets the length of the next row ──
   for (let r = 0; r + 1 < totalRows; r++) {
@@ -5722,8 +5756,18 @@ function _sidDumpImport(regs, meta) {
     speed: Math.max(1, Math.min(255, rowLen(0))), skipped: skipped };
 }
 
-function _sidApplyImportedTune(res) {
+function _sidSetTuneTitle(title) {
+  const el = document.getElementById("sid-tune-title");
+  if (el) el.textContent = title || "";
+  try {
+    if (title) localStorage.setItem("va-sid-tune-title", title);
+    else localStorage.removeItem("va-sid-tune-title");
+  } catch (_) {}
+}
+
+function _sidApplyImportedTune(res, title) {
   _sidStop();
+  _sidSetTuneTitle(title);
   _sidInsts = res.insts;
   _sidPatterns = res.patterns;
   _sidSong = res.song;
@@ -5819,8 +5863,9 @@ async function _sidRunSidImport() {
     progress(null, "");
     busy(false);
     dlg.close();
+    const info = _sidHeaderInfo(_sidSidImportBytes);
     _sidSidImportBytes = null;
-    _sidApplyImportedTune(res);
+    _sidApplyImportedTune(res, info ? [info.name, info.author].filter(Boolean).join(" — ") : "");
     const skipped = Object.keys(res.skipped).map(function(k){ return k + " ×" + res.skipped[k]; });
     showViceToast(tf("sidImportSidDone", { insts: res.insts.length, pats: res.patterns.length, song: res.song.length, speed: res.speed }) +
       (skipped.length ? " " + tf("sidGoatSkipped", { list: skipped.join(", ") }) : ""), false);
@@ -6849,6 +6894,13 @@ function setupSidEditor() {
   };
   // non-modal: the SID Player and the other windows stay usable beside it
   const openEditor = function() {
+    // centered, but with left / top: a centering transform would be the panels' containing block
+    if (!_editorDialogPositions["sid-editor-dialog"]) {
+      _editorDialogPositions["sid-editor-dialog"] = {
+        left: Math.round(Math.max(8, (window.innerWidth - Math.min(1000, window.innerWidth * 0.97)) / 2)),
+        top: Math.round(Math.max(8, (window.innerHeight - Math.min(1120, window.innerHeight * 0.98)) / 2))
+      };
+    }
     dialog._applyPosition?.();
     if (!_sidInited) { _sidInit(); _sidAutosaveStart(); }
     _sidEditorEngineSync(); _sidLcdIdle(); dialog.show();
@@ -6861,6 +6913,10 @@ function setupSidEditor() {
   };
   const closeEditor = function() { _sidCloseVirtualKeyboard(false); _sidStop(); _sidAutosave(); dialog.close(); syncEditorButton(); };
   onId("sid-editor-btn", "click", function() { if (dialog.open) closeEditor(); else openEditor(); });
+  onId("app-new-tune-btn", "click", function() {
+    if (!dialog.open) openEditor();
+    document.getElementById("sid-new-tune")?.click();
+  });
   onId("sid-close", "click", closeEditor);
   // Esc in a non-modal dialog is handled here, and not while a floating part has the focus
   dialog.addEventListener("keydown", function(e) {
@@ -7039,7 +7095,7 @@ function setupSidEditor() {
     sidVkbdHdr.addEventListener("pointerup", endVkbdDrag);
     sidVkbdHdr.addEventListener("pointercancel", endVkbdDrag);
   }
-  onId("sid-tracker-detach", "click", function(){ _sidSetTrackerDetached(true); });
+  onId("sid-tracker-detach", "click", function(){ _sidSetTrackerDetached(!_sidTrackerIsDetached()); });
   _sidSetupRoll();
   onId("sid-inst-sel", "change", _sidRollSyncHeader);
   onId("sid-tracker-attach", "click", function(){ _sidSetTrackerDetached(false); });
@@ -7075,6 +7131,12 @@ function setupSidEditor() {
     reader.readAsArrayBuffer(file); e.target.value = "";
   });
   const sidSidFile = document.getElementById("sid-sid-file");
+  const sidNewTune = async function(){
+    if (!(await _showConfirm(t("sidNewTuneConfirm")))) return;
+    _sidApplyImportedTune({ insts: [_sidNewInst()], patterns: [_sidNewPattern()], song: [0], speed: 6 }, "");
+  };
+  onId("sid-new-tune", "click", sidNewTune);
+  onId("sid-new-tune-btn", "click", sidNewTune);
   onId("sid-import-sid", "click", function(){ if (sidSidFile) sidSidFile.click(); });
   if (sidSidFile) sidSidFile.addEventListener("change", function(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
@@ -7087,7 +7149,7 @@ function setupSidEditor() {
   if (sidBinFile) sidBinFile.addEventListener("change", function(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(){ _sidDeserialize(new Uint8Array(reader.result)); };
+    reader.onload = function(){ _sidStop(); _sidDeserialize(new Uint8Array(reader.result)); _sidSetTuneTitle(file.name); };
     reader.readAsArrayBuffer(file); e.target.value = "";
   });
 
@@ -7185,16 +7247,39 @@ function _dlgRaise(dlg) {
   _dlgMarkActive(dlg);
 }
 
-// Az aktív (legutóbb használt) nem modális ablak kiemelt keretet és fejlécet kap (.dlg-active).
+// The active (last used) window gets a highlighted frame and header (.dlg-active): a non-modal
+// dialog or a floating panel of the SID Editor. A panel is a window of its own, not its dialog.
+const _DLG_PANELS = ".sid-trk-float:not([hidden]), .sid-vkbd-dialog:not([hidden])";
 function _dlgMarkActive(active) {
-  document.querySelectorAll("dialog.dlg-active").forEach((d) => { if (d !== active) d.classList.remove("dlg-active"); });
+  document.querySelectorAll(".dlg-active").forEach((d) => { if (d !== active) d.classList.remove("dlg-active"); });
   active?.classList.add("dlg-active");
+}
+
+// The panels' order inside the editor. It stays under the editor's own menus (z-index 40).
+let _dlgPanelStack = [];
+function _dlgRaisePanel(panel) {
+  _dlgPanelStack = _dlgPanelStack.filter((p) => p !== panel && !p.hidden);
+  _dlgPanelStack.push(panel);
+  _dlgPanelStack.forEach((p, i) => { p.style.zIndex = String(30 + i); });
+  _dlgMarkActive(panel);
+}
+
+// The window on top after the active one went away.
+function _dlgMarkTop() {
+  _dlgStack = _dlgStack.filter((d) => d.open && !_dlgIsModal(d));
+  const top = _dlgStack[_dlgStack.length - 1] || null;
+  const panels = top?.id === "sid-editor-dialog" ? _dlgPanelStack.filter((p) => !p.hidden) : [];
+  _dlgMarkActive(panels[panels.length - 1] || top);
 }
 
 function setupDialogStacking() {
   document.addEventListener("pointerdown", (e) => {
     const dlg = e.target?.closest?.("dialog[open]");
-    if (dlg && !_dlgIsModal(dlg)) _dlgRaise(dlg);
+    if (dlg && !_dlgIsModal(dlg)) {
+      _dlgRaise(dlg);
+      const panel = e.target.closest(_DLG_PANELS);
+      if (panel) _dlgRaisePanel(panel);
+    }
     // a főablakba kattintva egyik lebegő ablak sem aktív
     else if (!dlg) _dlgMarkActive(null);
   }, true);
@@ -7203,13 +7288,25 @@ function setupDialogStacking() {
     const dlg = e.target;
     if (!(dlg instanceof HTMLDialogElement)) return;
     if (dlg.open && !_dlgIsModal(dlg)) _dlgRaise(dlg);
-    else if (!dlg.open && dlg.classList.contains("dlg-active")) {
+    else if (!dlg.open && (dlg.classList.contains("dlg-active") || dlg.querySelector(".dlg-active"))) {
       // bezáráskor az alatta lévő nyitott ablak lesz az aktív
       dlg.classList.remove("dlg-active");
-      _dlgStack = _dlgStack.filter((d) => d !== dlg && d.open && !_dlgIsModal(d));
-      _dlgMarkActive(_dlgStack[_dlgStack.length - 1] || null);
+      dlg.querySelector(".dlg-active")?.classList.remove("dlg-active");
+      _dlgStack = _dlgStack.filter((d) => d !== dlg);
+      _dlgMarkTop();
     }
   }, true);
+  // A panel a hidden attribútummal nyílik és zárul, több helyről is.
+  const panelObserver = new MutationObserver((changes) => {
+    changes.forEach(({ target: panel }) => {
+      if (!panel.hidden) { if (panel.closest("dialog[open]")) _dlgRaisePanel(panel); return; }
+      const wasActive = panel.classList.contains("dlg-active");
+      panel.classList.remove("dlg-active");
+      _dlgPanelStack = _dlgPanelStack.filter((p) => p !== panel);
+      if (wasActive) _dlgMarkTop();
+    });
+  });
+  document.querySelectorAll(".sid-trk-float, .sid-vkbd-dialog").forEach((panel) => panelObserver.observe(panel, { attributes: true, attributeFilter: ["hidden"] }));
 }
 
 _confirmYes?.addEventListener("click", () => { _confirmDialog?.close(); _confirmResolve?.(true); });
@@ -7318,6 +7415,8 @@ function _sidApplyTranslations() {
   setText("#sid-load-bin", t("sidLoadBin"));
   setText("#sid-save-bin", t("sidSaveBin"));
   setText("#sid-import-goat", t("sidImportGoat"));
+  setText("#sid-new-tune", t("sidNewTune"));
+  setText("#sid-new-tune-btn", t("sidNewTune"));
   setText("#sid-import-sid", t("sidImportSid"));
   setText("#sid-master-vol-lbl", t("sidMasterVolume"));
   setText("#sid-vkbd-inst-lbl", t("sidVkbdInstrumentLabel"));
@@ -7454,7 +7553,7 @@ function _sidApplyTranslations() {
   setText("#sid-vkbd-insert-label", t("sidVkbdInsert"));
   setText("#sid-vkbd-showplay-label", t("sidVkbdShowPlay"));
   setText("#sid-vkbd-octaves-label", t("sidVkbdOctaves"));
-  setAttr("#sid-tracker-detach", t("sidTrackerDetach"));
+  _sidSyncDetachBtn();
   setAttr("#sid-roll-btn", t("sidRollTitle"));
   setText("#sid-roll-title", t("sidRollTitle"));
   setText("#sid-roll-help", t("sidRollHelp"));
@@ -7511,6 +7610,7 @@ function _sidApplyTranslations() {
   setText('.theme-option[data-theme-opt="light"] span:not(.theme-option-dot)', t("themeLight"));
   setText('.theme-option[data-theme-opt="dark"] span:not(.theme-option-dot)', t("themeDark"));
   setAttr("#sid-editor-btn", t("sidEditorBtn"));
+  setAttr("#app-new-tune-btn", t("sidNewTune"));
   ["new-program-cancel", "sample-cancel", "sid-import-sid-cancel"].forEach(id => setText("#" + id, t("cancel")));
   ["vc-diff-close", "sample-dialog-close", "support-x", "de-close", "dbe-close", "c64-chrrom-close", "ce-close", "cc-close",
     "me-close", "nc-close", "lv-close", "hg-close", "se-close", "se-sheet-close", "sid-close", "sid-roll-close", "sid-vkbd-close",
@@ -7520,7 +7620,7 @@ function _sidApplyTranslations() {
   setAttr("#sid-bpm", t("sidBpmTip"));
   ["#sid-metronome", "#sid-roll-metronome", "#sid-vkbd-metronome"].forEach(sel => setAttr(sel, t("sidMetronome")));
   setAttr("#sid-roll .sid-roll-voices", t("sidRollVoice"));
-  if (_confirmYes) _confirmYes.textContent = t("tabCloseConfirmOk");
+  if (_confirmYes) _confirmYes.textContent = t("sidConfirmYes");
   if (_confirmNo) _confirmNo.textContent = t("tabCloseConfirmCancel");
   setText("#app-settings-title", t("appSettings"));
   setText("#theme-toggle-label", t("themeToggle"));
@@ -7546,10 +7646,59 @@ function _sidAutosaveStart() {
     if (saved) {
       _sidAutosaved = atob(saved);
       _sidDeserialize(Uint8Array.from(_sidAutosaved, (c) => c.charCodeAt(0)));
+      _sidSetTuneTitle(localStorage.getItem("va-sid-tune-title") || "");
     }
   } catch (e) { console.warn("SID autosave could not be restored:", e); }
   setInterval(_sidAutosave, 5000);
   window.addEventListener("beforeunload", _sidAutosave);
+}
+
+// The Visual Assembler's splash: READY. is typed in, the bar runs once, then it fades away.
+function _setupSplash() {
+  const splash = document.getElementById("splash-screen");
+  const panel = splash && splash.querySelector(".splash-panel");
+  if (!panel) return;
+  Promise.resolve(window.__TAURI__?.app?.getVersion?.()).then(function(version) {
+    const el = document.getElementById("splash-version");
+    if (el && version) el.textContent = "v" + version;
+  }).catch(function() {});
+
+  const textEl = document.getElementById("splash-ready-text");
+  const cursorEl = textEl.nextElementSibling;
+  // one C64 font pixel is 1/8 em: a whole number of device pixels, or the letters and the cursor box round apart
+  const readyEl = textEl.parentElement, dpr = window.devicePixelRatio || 1;
+  const fontPx = Math.max(1, Math.round(parseFloat(getComputedStyle(readyEl).fontSize) * dpr / 8));
+  readyEl.style.fontSize = (fontPx * 8 / dpr) + "px";
+  const msg = "READY.";
+  let typed = 0;
+  const type = function() {
+    if (typed < msg.length) {
+      textEl.textContent += msg[typed++];
+      setTimeout(type, 80 + Math.random() * 40);
+    } else {
+      cursorEl.style.animation = "splash-cursor-blink 0.6s step-end infinite";
+    }
+  };
+  cursorEl.style.animation = "none";
+  setTimeout(type, 700);
+
+  let hidden = false;
+  const hide = function() {
+    if (hidden) return;
+    hidden = true;
+    splash.classList.add("fade-out");
+    setTimeout(function() { splash.remove(); }, 500);
+  };
+  const reveal = function() {
+    panel.classList.add("ready");
+    panel.querySelector(".splash-loader-bar").addEventListener("animationend", hide, { once: true });
+  };
+  Promise.race([
+    document.fonts ? document.fonts.ready : Promise.resolve(),
+    new Promise(function(r) { setTimeout(r, 1500); })
+  ]).then(function() { requestAnimationFrame(reveal); });
+  // it can never get stuck
+  setTimeout(hide, 8000);
 }
 
 function _setupAppSettings() {
@@ -7602,6 +7751,7 @@ setupDraggableEditorDialogs();
 setupDialogStacking();
 _setupAppSettings();
 _setupThemePicker();
+_setupSplash();
 _sidApplyTranslations();
 // The player is the app's main window: it is open at every start. setupSidPlayer restores its state in a timeout.
 setTimeout(_sidPlayerShow, 0);

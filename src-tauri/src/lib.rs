@@ -1,4 +1,4 @@
-// VA SID Editor backend: SID emulation (VA SID Core), .sid register dump, the VMA build of the player, file saving.
+// VA SID Studio backend: SID emulation (VA SID Core), .sid register dump, the VMA build of the player, file saving.
 mod c64;
 mod hvsc;
 mod mos6510;
@@ -39,7 +39,7 @@ fn write_config(app: &AppHandle, cfg: &serde_json::Value) {
 fn update_http_client(app: &AppHandle, timeout_secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
-        .user_agent(format!("VASidEditor/{}", app.package_info().version))
+        .user_agent(format!("VASidStudio/{}", app.package_info().version))
         .build()
         .map_err(|e| e.to_string())
 }
