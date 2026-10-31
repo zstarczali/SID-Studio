@@ -1,0 +1,15 @@
+{
+  "name": "va-sid-editor",
+  "version": "1.0.0",
+  "description": "Commodore 64 SID player and tracker, extracted from C64 Visual Assembler.",
+  "author": "Zsolt Tarczali",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

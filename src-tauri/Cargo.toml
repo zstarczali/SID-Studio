@@ -1,0 +1,33 @@
+[package]
+name = "va-sid-editor"
+version = "1.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "va_sid_editor_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-window-state = "2"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+sevenz-rust2 = { version = "0.24", default-features = false, features = ["ppmd"] }
+urlencoding = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+# assembles the exported player for playback and the .sid export
+vma = { git = "https://github.com/zstarczali/VMA.git", branch = "main" }
+
+# the SID emulation runs slower than real time unoptimised
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
