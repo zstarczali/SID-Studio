@@ -323,6 +323,10 @@ fn open_external(url: String, app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_vma_version() -> &'static str {
+    env!("VMA_VERSION")
+}
 
 /// Assembles the exported 6502 player; the image alone, as the SID Editor's .sid export cuts it.
 #[tauri::command]
@@ -383,6 +387,7 @@ pub fn run() {
             sid_file_info,
             sid_register_dump,
             open_external,
+            get_vma_version,
             hvsc::hvsc_status,
             hvsc::hvsc_catalog,
             hvsc::hvsc_fetch,

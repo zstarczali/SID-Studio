@@ -305,7 +305,16 @@ const translations = {
   "off": "KI",
   "cancel": "Mégsem",
   "appSettings": "Beállítások",
-  "appLanguage": "Nyelv"
+  "appLanguage": "Nyelv",
+  "about": "Névjegy",
+  "aboutDescText": "Commodore 64 SID lejátszó és tracker.\nHallgasd a SID-gyűjteményeket, és szerezz zenét a három szólamú chipre.",
+  "aboutLicenseLabel": "Licenc:",
+  "aboutWebsiteLabel": "Visual Assembler weboldal:",
+  "aboutSidCreditLabel": "WebSID lejátszó: WebSid (a Tiny'R'Sid WebAudio változata), Juergen Wothke. GitHub repository:",
+  "aboutCoreCreditLabel": "VA SID Core: a C64 emuláció a VICE Rust portja. Weboldal:",
+  "aboutRepoLabel": "VA SID Studio GitHub repository:",
+  "aboutVmaRepoLabel": "VMA GitHub repository:",
+  "aboutVmaVersionLabel": "VMA fordító verzió:"
  },
  "en": {
   "themeLight": "Light",
@@ -613,7 +622,16 @@ const translations = {
   "off": "OFF",
   "cancel": "Cancel",
   "appSettings": "Settings",
-  "appLanguage": "Language"
+  "appLanguage": "Language",
+  "about": "About",
+  "aboutDescText": "A Commodore 64 SID player and tracker.\nListen to SID collections and compose for the three-voice chip.",
+  "aboutLicenseLabel": "License:",
+  "aboutWebsiteLabel": "Visual Assembler website:",
+  "aboutSidCreditLabel": "WebSID player: WebSid (WebAudio version of Tiny'R'Sid) by Juergen Wothke. GitHub repository:",
+  "aboutCoreCreditLabel": "VA SID Core: the C64 emulation is a Rust port of VICE. Website:",
+  "aboutRepoLabel": "VA SID Studio GitHub repository:",
+  "aboutVmaRepoLabel": "VMA GitHub repository:",
+  "aboutVmaVersionLabel": "VMA compiler version:"
  },
  "es": {
   "themeLight": "Claro",
@@ -921,7 +939,16 @@ const translations = {
   "off": "OFF",
   "cancel": "Cancelar",
   "appSettings": "Ajustes",
-  "appLanguage": "Idioma"
+  "appLanguage": "Idioma",
+  "about": "Acerca de",
+  "aboutDescText": "Reproductor SID y tracker para Commodore 64.\nEscucha colecciones SID y compón para el chip de tres voces.",
+  "aboutLicenseLabel": "Licencia:",
+  "aboutWebsiteLabel": "Sitio web de Visual Assembler:",
+  "aboutSidCreditLabel": "Reproductor WebSID: WebSid (versión WebAudio de Tiny'R'Sid) de Juergen Wothke. Repositorio de GitHub:",
+  "aboutCoreCreditLabel": "VA SID Core: la emulación del C64 es una adaptación a Rust de VICE. Sitio web:",
+  "aboutRepoLabel": "Repositorio de GitHub de VA SID Studio:",
+  "aboutVmaRepoLabel": "Repositorio de GitHub de VMA:",
+  "aboutVmaVersionLabel": "Versión del compilador VMA:"
  },
  "de": {
   "themeLight": "Hell",
@@ -1229,7 +1256,16 @@ const translations = {
   "off": "OFF",
   "cancel": "Abbrechen",
   "appSettings": "Einstellungen",
-  "appLanguage": "Sprache"
+  "appLanguage": "Sprache",
+  "about": "Über",
+  "aboutDescText": "Ein SID-Player und Tracker für den Commodore 64.\nHöre SID-Sammlungen und komponiere für den dreistimmigen Chip.",
+  "aboutLicenseLabel": "Lizenz:",
+  "aboutWebsiteLabel": "Visual Assembler Website:",
+  "aboutSidCreditLabel": "WebSID-Player: WebSid (WebAudio-Version von Tiny'R'Sid) von Juergen Wothke. GitHub-Repository:",
+  "aboutCoreCreditLabel": "VA SID Core: Die C64-Emulation ist eine Rust-Portierung von VICE. Website:",
+  "aboutRepoLabel": "GitHub-Repository von VA SID Studio:",
+  "aboutVmaRepoLabel": "GitHub-Repository von VMA:",
+  "aboutVmaVersionLabel": "VMA-Compiler-Version:"
  },
  "nl": {
   "themeLight": "Licht",
@@ -1537,7 +1573,16 @@ const translations = {
   "off": "OFF",
   "cancel": "Annuleren",
   "appSettings": "Instellingen",
-  "appLanguage": "Taal"
+  "appLanguage": "Taal",
+  "about": "Over",
+  "aboutDescText": "Een SID-speler en tracker voor de Commodore 64.\nLuister naar SID-collecties en componeer voor de driestemmige chip.",
+  "aboutLicenseLabel": "Licentie:",
+  "aboutWebsiteLabel": "Visual Assembler-website:",
+  "aboutSidCreditLabel": "WebSID-speler: WebSid (WebAudio-versie van Tiny'R'Sid) door Juergen Wothke. GitHub-repository:",
+  "aboutCoreCreditLabel": "VA SID Core: de C64-emulatie is een Rust-port van VICE. Website:",
+  "aboutRepoLabel": "GitHub-repository van VA SID Studio:",
+  "aboutVmaRepoLabel": "GitHub-repository van VMA:",
+  "aboutVmaVersionLabel": "VMA-compilerversie:"
  },
  "pl": {
   "themeLight": "Jasny",
@@ -1845,7 +1890,16 @@ const translations = {
   "off": "WYŁ.",
   "cancel": "Anuluj",
   "appSettings": "Ustawienia",
-  "appLanguage": "Język"
+  "appLanguage": "Język",
+  "about": "O programie",
+  "aboutDescText": "Odtwarzacz SID i tracker dla Commodore 64.\nSłuchaj kolekcji SID i komponuj na trzygłosowy układ.",
+  "aboutLicenseLabel": "Licencja:",
+  "aboutWebsiteLabel": "Strona Visual Assembler:",
+  "aboutSidCreditLabel": "Odtwarzacz WebSID: WebSid (wersja WebAudio Tiny'R'Sid) autorstwa Juergena Wothke. Repozytorium GitHub:",
+  "aboutCoreCreditLabel": "VA SID Core: emulacja C64 to port VICE w języku Rust. Strona:",
+  "aboutRepoLabel": "Repozytorium GitHub VA SID Studio:",
+  "aboutVmaRepoLabel": "Repozytorium GitHub VMA:",
+  "aboutVmaVersionLabel": "Wersja kompilatora VMA:"
  },
  "it": {
   "themeLight": "Chiaro",
@@ -2153,6 +2207,15 @@ const translations = {
   "off": "OFF",
   "cancel": "Annulla",
   "appSettings": "Impostazioni",
-  "appLanguage": "Lingua"
+  "appLanguage": "Lingua",
+  "about": "Informazioni",
+  "aboutDescText": "Un player SID e tracker per il Commodore 64.\nAscolta le collezioni SID e componi per il chip a tre voci.",
+  "aboutLicenseLabel": "Licenza:",
+  "aboutWebsiteLabel": "Sito web di Visual Assembler:",
+  "aboutSidCreditLabel": "Player WebSID: WebSid (versione WebAudio di Tiny'R'Sid) di Juergen Wothke. Repository GitHub:",
+  "aboutCoreCreditLabel": "VA SID Core: l'emulazione del C64 è un port in Rust di VICE. Sito web:",
+  "aboutRepoLabel": "Repository GitHub di VA SID Studio:",
+  "aboutVmaRepoLabel": "Repository GitHub di VMA:",
+  "aboutVmaVersionLabel": "Versione del compilatore VMA:"
  }
 };

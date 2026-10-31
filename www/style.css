@@ -1915,6 +1915,128 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
 .app-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0; font-size: 0.82rem; }
 .app-settings-row .sid-select { width: 190px; flex: 0 0 190px; }
 
+/* About, the same as the Visual Assembler's */
+.about-dialog {
+  border: 1px solid color-mix(in srgb, var(--text) 22%, var(--panel));
+  border-radius: 4px;
+  padding: 0;
+  background: var(--panel);
+  box-shadow: 0 24px 64px color-mix(in srgb, black 30%, transparent);
+  max-width: 640px;
+  width: 92vw;
+}
+[data-theme="light"] .about-dialog,
+[data-theme="starlight"] .about-dialog,
+[data-theme="beige"] .about-dialog {
+  border-color: color-mix(in srgb, var(--text) 45%, var(--panel));
+}
+.about-dialog::backdrop {
+  background: color-mix(in srgb, black 55%, transparent);
+  backdrop-filter: blur(4px);
+}
+.about-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 40px 28px;
+  text-align: center;
+}
+.about-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.about-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 28px;
+  width: 100%;
+  text-align: left;
+  align-items: start;
+  margin-top: 6px;
+}
+.about-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.about-col-right {
+  align-items: center;
+  text-align: center;
+}
+@media (max-width: 560px) {
+  .about-columns { grid-template-columns: 1fr; }
+  .about-col-left { text-align: center; align-items: center; }
+}
+.about-logo img {
+  width: 160px;
+  height: 160px;
+  border-radius: 18px;
+}
+.about-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.about-version {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  color: var(--secondary);
+  font-weight: 600;
+}
+#about-vma-version { font-weight: 400; }
+.about-compilers {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+}
+.about-compiler {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.about-compiler .about-repo a { overflow-wrap: anywhere; }
+.about-ub-banner {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.about-desc {
+  margin: 4px 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.about-sid-credit,
+.about-repo {
+  max-width: 100%;
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.about-author {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.about-contact { margin: 0; font-size: 0.8rem; }
+.about-contact a { color: var(--secondary); text-decoration: none; }
+.about-contact a:hover { text-decoration: underline; }
+#about-close { min-width: 120px; }
+
 /* Splash, the same as the Visual Assembler's */
 html:has(#splash-screen) { overflow: hidden; }
 .splash-screen {

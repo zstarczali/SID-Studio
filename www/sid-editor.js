@@ -7627,6 +7627,21 @@ function _sidApplyTranslations() {
   setAttr("#theme-toggle", t("themeToggle"));
   setText("#app-language-lbl", t("appLanguage"));
   setAttr("#app-settings-btn", t("appSettings"));
+  setAttr("#app-about-btn", t("about"));
+  const aboutDesc = document.getElementById("about-desc");
+  aboutDesc.replaceChildren();
+  t("aboutDescText").split("\n").forEach((line, i) => {
+    if (i) aboutDesc.appendChild(document.createElement("br"));
+    aboutDesc.appendChild(document.createTextNode(line));
+  });
+  setText("#about-license-label", t("aboutLicenseLabel"));
+  setText("#about-website-label", t("aboutWebsiteLabel"));
+  setText("#about-sid-credit-label", t("aboutSidCreditLabel"));
+  setText("#about-core-credit-label", t("aboutCoreCreditLabel"));
+  setText("#about-repo-label", t("aboutRepoLabel"));
+  setText("#about-vma-repo-label", t("aboutVmaRepoLabel"));
+  setText("#about-vma-version-label", t("aboutVmaVersionLabel"));
+  setText("#about-close", t("close"));
 }
 
 // Closing the window would lose the tune: the last state stays in the local storage.
@@ -7740,6 +7755,28 @@ function _setupAppSettings() {
   });
 }
 
+function _setupAbout() {
+  const dialog = document.getElementById("about-dialog");
+  const closeBtn = document.getElementById("about-close");
+  dialog.addEventListener("dragstart", (e) => e.preventDefault());
+  dialog.querySelectorAll("a[href]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.electronAPI?.openExternal(a.href);
+  }));
+  closeBtn.addEventListener("click", () => dialog.close());
+  document.getElementById("app-about-btn").addEventListener("click", async () => {
+    const [version, vmaVersion] = await Promise.all([
+      Promise.resolve(window.__TAURI__?.app?.getVersion?.()).catch(() => null),
+      Promise.resolve(window.electronAPI?.getVmaVersion?.()).catch(() => null)
+    ]);
+    document.getElementById("about-version").textContent = version ? "v" + version : "v?";
+    document.getElementById("about-vma-version-value").textContent = vmaVersion ? "v" + vmaVersion : "v?";
+    dialog.showModal();
+    // the first form control would be a link: Enter would open it instead of closing the dialog
+    requestAnimationFrame(() => closeBtn.focus());
+  });
+}
+
 const _savedLanguage = localStorage.getItem("va-sid-editor-language");
 const _sysLanguage = (navigator.language || "en").slice(0, 2);
 currentLanguage = translations[_savedLanguage] ? _savedLanguage : translations[_sysLanguage] ? _sysLanguage : "en";
@@ -7750,6 +7787,7 @@ setupSidEditor();
 setupDraggableEditorDialogs();
 setupDialogStacking();
 _setupAppSettings();
+_setupAbout();
 _setupThemePicker();
 _setupSplash();
 _sidApplyTranslations();
