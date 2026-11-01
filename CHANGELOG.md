@@ -14,6 +14,18 @@
 - SID Player buffer in seconds: the tune is rendered 10, 15, 20 or 30 s ahead.
 - About: reSID and resid-rs in place of the WebSID credit.
 
+### SID Player
+
+- HVSC: the search panel can search composer names only (All / Composer).
+
+### SID Editor
+
+- Tracker keys: the upper row played a semitone too high from `R` on, and F could not be entered from it.
+
+### Manual
+
+- New user manual in English: `VA SID Studio Manual.md`, printed to `docs/VA SID Studio Manual.pdf`. The installers carry the PDF, and the new Manual toolbar button opens it.
+
 ## 1.2.0 - 2026-11-01
 
 ### Two SIDs

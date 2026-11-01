@@ -11,6 +11,8 @@ A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vani
 The app is an empty workspace: the SID Player, the SID Editor and the other windows float in it.
 The edited tune is kept in the app's local storage between runs; `Save .bin` writes it to a file.
 
+User manual: [VA SID Studio Manual.md](VA%20SID%20Studio%20Manual.md) (PDF: `docs/VA SID Studio Manual.pdf`).
+
 ```
 npm install
 npm run dev     # tauri dev

@@ -7,6 +7,7 @@
     saveBin: (payload) => invoke("save_bin", { payload }),
     onHvscProgress: (cb) => window.__TAURI__.event.listen("hvsc-download-progress", e => cb(e.payload)),
     openExternal: (url) => invoke("open_external", { url }),
+    openManual: () => invoke("open_manual"),
     getVmaVersion: () => invoke("get_vma_version"),
     hvscCatalog: (refresh) => invoke("hvsc_catalog", { refresh: !!refresh }),
     hvscStatus: () => invoke("hvsc_status"),

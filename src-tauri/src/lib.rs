@@ -359,6 +359,20 @@ fn open_external(url: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_manual(app: AppHandle) -> Result<(), String> {
+    let path = app
+        .path()
+        .resolve("docs/VA SID Studio Manual.pdf", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| e.to_string())?;
+    if !path.is_file() {
+        return Err(format!("{} not found", path.display()));
+    }
+    app.opener()
+        .open_path(path.to_string_lossy().as_ref(), None::<String>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_vma_version() -> &'static str {
     env!("VMA_VERSION")
 }
@@ -422,6 +436,7 @@ pub fn run() {
             sid_file_info,
             sid_register_dump,
             open_external,
+            open_manual,
             get_vma_version,
             hvsc::hvsc_status,
             hvsc::hvsc_catalog,
