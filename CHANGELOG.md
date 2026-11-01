@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 - 2026-11-01
+
+### SID engine
+
+- reSID in place of WebSID: the SID Player and the SID Editor play on the native backend, on resid-rs (a Rust port of
+  reSID, the default) or on VA SID Core, both with the MOS 6581 or 8580. A saved WebSID setting moves to reSID.
+- Seeking, stereo 2SID and 3SID tunes and the C64 core work with both engines.
+- **Play: All** plays the frame-exact JS model of the exported player, like every other preview. The exported player
+  and the `.sid` export do not change.
+- `src-tauri/vendor/resid-rs` is resid-rs 1.1.1 with one fix: the resampler's FIR interpolation overflowed 32 bits
+  (`VENDORED.md`).
+- SID Player buffer in seconds: the tune is rendered 10, 15, 20 or 30 s ahead.
+- About: reSID and resid-rs in place of the WebSID credit.
+
 ## 1.2.0 - 2026-11-01
 
 ### Two SIDs

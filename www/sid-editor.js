@@ -198,7 +198,7 @@ function showViceToast(message, isError = false) {
 // Settings setup runs inside initPalette, before the SID editor code below.
 var _VA_SID_CORE_VERSION = "1.2";
 
-var _sidPreviewEngine = "websid";
+var _sidPreviewEngine = "resid";
 
 var _sidPreviewModel = "8580";
 
@@ -392,18 +392,19 @@ const _SID_BEATS_PER_BAR = 4;
 
 let _sidMasterVol = 0.6;
 
-// 0..1, drives both Web Audio and WebSid preview
+// 0..1
 function _sidLoadPreviewSettings() {
   try {
     const savedEngine = localStorage.getItem("c64va-sid-preview-engine");
-    if (savedEngine === "websid" || savedEngine === "va-core") _sidPreviewEngine = savedEngine;
+    // a saved "websid" (no longer in the app) gets the default
+    if (savedEngine === "resid" || savedEngine === "va-core") _sidPreviewEngine = savedEngine;
     const savedModel = localStorage.getItem("c64va-sid-preview-model");
     if (savedModel === "6581" || savedModel === "8580") _sidPreviewModel = savedModel;
   } catch (_) {}
   const engineEl = document.getElementById("sid-preview-engine");
   if (engineEl) engineEl.value = _sidPreviewEngine;
   const modelEl = document.getElementById("sid-preview-model");
-  if (modelEl) { modelEl.value = _sidPreviewModel; modelEl.disabled = _sidPreviewEngine !== "va-core"; }
+  if (modelEl) modelEl.value = _sidPreviewModel;
   _sidEditorEngineSync();
   _sidLcdApplyColor();
 }
@@ -456,7 +457,6 @@ let _sidOctave = 4;
 
 var _sidPaused = false;
 
-var _sidPlaybackUsingWebSid = false;
 
 let _sidVkbdDrag = null;
 
@@ -584,7 +584,7 @@ function _sidBuildSongList() {
   const wrap = document.getElementById("sid-song-list");
   if (!wrap || !_sidSong) return;
   wrap.innerHTML = "";
-  const playing = !!(_sidTimer || _sidPlaybackUsingWebSid) && !_sidPaused;
+  const playing = !!_sidTimer && !_sidPaused;
   _sidSong.forEach(function(patIdx, pos) {
     const chip = document.createElement("button");
     chip.type = "button";
@@ -1067,13 +1067,13 @@ function _sidPreviewArpeggio() {
   const startTime = _sidAudio.currentTime;
   const baseWhen = startTime + 0.02;
   const stepDur = 0.12;
-  if (_sidUsesVaCore()) {
+  if (_sidUsesNativeCore()) {
     const td = _sidTuneData({ insts: [_sidCurInst()], patterns: [], song: [0], speed: 255 });
     const engine = _sidEngineNew(td);
     const stepFrames = Math.round(stepDur * 50);
     const tail = Math.min(150, Math.ceil(_SID_DCR[td.insts[0].r] / 20) + 6);
     // Egyetlen voice és puffer: az IPC késése nem tolhatja egymásra a hangokat.
-    _sidRenderVaCore(engine, length * stepFrames + tail, _sidAudio.sampleRate, function(eng, frame) {
+    _sidRenderNative(engine, length * stepFrames + tail, _sidAudio.sampleRate, function(eng, frame) {
       if (frame < length * stepFrames && frame % stepFrames === 0) {
         const step = Math.floor(frame / stepFrames);
         _sidEngNoteOn(eng, 0, notes[order[step % order.length]], 0);
@@ -1992,7 +1992,7 @@ function _sidRollDelete(n) {
 }
 
 function _sidRollPlayRow() {
-  const playing = !!(_sidTimer || _sidWaPlay || _sidPlaybackUsingWebSid);
+  const playing = !!(_sidTimer || _sidWaPlay);
   if (!playing) return null;
   const pos = _sidPlayMode === "all" ? _sidSongPlayPos : Math.max(0, _sidSong.indexOf(_sidPlayPat));
   return pos * _SID_ROWS + _sidRow;
@@ -2418,24 +2418,13 @@ function _sidLoadMasterVolume() {
 }
 
 function _sidApplyMasterVolume() {
-  // Web Audio path: adjust the shared gain node in real time
   if (_sidMasterGain) {
     try { _sidMasterGain.gain.setTargetAtTime(_sidMasterVol, _sidMasterGain.context.currentTime, 0.02); }
     catch(_) { _sidMasterGain.gain.value = _sidMasterVol; }
   }
-  // WebSid path: ScriptNodePlayer has its own GainNode
-  try {
-    if (typeof ScriptNodePlayer !== "undefined") {
-      // WebSid's setVolume takes a linear multiplier; boost by ~1.6x so 100%
-      // slider ≈ typical DeepSID loud output, and 60% default sits comfortably.
-      ScriptNodePlayer.getInstance()?.setVolume(_sidMasterVol * 1.6);
-    }
-  } catch(_) {}
 }
-
-/* Note preview: `inst` plays for holdSec, then the gate is released. Through
-   the WebSid register stream when available; otherwise one engine voice is
-   rendered with the release tail by the synth. */
+/* Note preview: `inst` plays for holdSec, then the gate is released: one engine
+   voice with the release tail, on the backend's SID or (no backend) the synth. */
 function _sidPlayNote(inst, note, when, holdSec) {
   const ac = _sidEnsureAudio();
   const td = _sidTuneData({ insts: [inst], patterns: [], song: [0], speed: 255 });
@@ -2443,18 +2432,17 @@ function _sidPlayNote(inst, note, when, holdSec) {
   const ins = td.insts[0];
   const hold = Math.max(2, Math.round(Math.max(0.04, holdSec) * 50));
   const tail = Math.min(150, Math.ceil(_SID_DCR[ins.r] / 20) + 6);
-  if (_sidUsesVaCore()) {
-    _sidRenderVaCore(e, hold + tail, ac.sampleRate, function(eng, k) {
+  if (_sidUsesNativeCore()) {
+    _sidRenderNative(e, hold + tail, ac.sampleRate, function(eng, k) {
       if (k === 0) _sidEngNoteOn(eng, 0, Math.max(0, Math.min(95, note | 0)), 0);
       if (k === hold) eng.v[0].gate = 0;
     }).then(function(data) {
       _sidPlayBuffer(data, Math.max(ac.currentTime + 0.01, when));
     }).catch(function(error) {
-      console.warn("VA SID Core preview failed:", error);
+      console.warn("SID preview failed:", error);
     });
     return { src: null };
   }
-  if (_sidStreamNote(inst, note, when - ac.currentTime, holdSec)) return { src: null };
   const data = _sidRenderEngine(e, hold + tail, ac.sampleRate, function(eng, k) {
     if (k === 0) _sidEngNoteOn(eng, 0, Math.max(0, Math.min(95, note | 0)), 0);
     if (k === hold) eng.v[0].gate = 0;
@@ -2470,7 +2458,7 @@ function _sidPlayInst(inst, freq, when, holdSec) {
 /* ── Metronome + BPM helpers ─────────────────────────────────────────────
  * BPM derives from the frames-per-row Speed input: PAL 50 Hz, 4 rows/beat.
  * The metronome runs off the same setInterval tick that drives the tracker
- * row highlight, so it stays in phase with both Web Audio and WebSid preview. */
+ * row highlight, so it stays in phase with the preview. */
 function _sidComputeBpm() {
   const rowSec = Math.max(_sidSpeed, 1) / 50;
   return Math.round(60 / (rowSec * _SID_ROWS_PER_BEAT));
@@ -2597,29 +2585,9 @@ function _sidRecordStop() {
 
 function _sidToggleRecord() { if (_sidRecording) _sidRecordStop(); else _sidRecordStart(); }
 
-/* ── WebSid (Wothke) integration ─────────────────────────────────────────
- * Runs the compiled SID player + tune bytes through a real cycle-exact
- * 6510 + SID emulator (WASM). The preview button prefers this path; on
- * any init/load error it falls back to the built-in Web Audio approximation.
- * Loaded via scriptprocessor_player.min.js + backend_websid.js in index.html. */
-let _webSidBackend = null;
-
-let _webSidReady = false;
-
-let _webSidInitPromise = null;
-
-let _webSidBlobUrl = null;
-
-let _webSidActive = false;
-
 let _sidExternalCore = null;
 
-function _webSidAvailable() {
-  return typeof SIDBackendAdapter !== "undefined" && typeof ScriptNodePlayer !== "undefined";
-}
-
-// SID Player buffer (Settings → SID preview): WebSID ScriptProcessor samples; the VA SID Core
-// render-ahead grows with it. WebSID builds its audio node once, so a change applies after a restart.
+// SID Player buffer (Settings → SID preview): how many seconds the backend renders ahead.
 // Functions, not a const table: the Settings dialog reads them before this point of the script runs.
 function _sidPlayerAheadSeconds(size) {
   return { 2048: 10, 4096: 15, 8192: 20, 16384: 30 }[size] || 0;
@@ -2629,26 +2597,6 @@ function _sidPlayerBufferSize() {
   let n = 2048;
   try { n = parseInt(localStorage.getItem("c64va-sid-player-buffer"), 10) || 2048; } catch (_) {}
   return _sidPlayerAheadSeconds(n) ? n : 2048;
-}
-
-function _webSidInit() {
-  if (_webSidInitPromise) return _webSidInitPromise;
-  if (!_webSidAvailable()) return Promise.resolve(false);
-  _webSidInitPromise = new Promise((resolve) => {
-    try {
-      _webSidBackend = new SIDBackendAdapter();
-      _webSidBackend.setProcessorBufSize?.(_sidPlayerBufferSize());
-      const p = ScriptNodePlayer.initialize(_webSidBackend, function(){ _webSidActive = false; });
-      const done = () => { _webSidReady = true; resolve(true); };
-      const fail = (e) => { console.warn("WebSid init failed:", e); resolve(false); };
-      if (p && typeof p.then === "function") p.then(done).catch(fail);
-      else done();
-    } catch (e) {
-      console.warn("WebSid init threw:", e);
-      resolve(false);
-    }
-  });
-  return _webSidInitPromise;
 }
 
 function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026", secondSid = 0) {
@@ -2700,259 +2648,6 @@ async function _buildSidPreviewPrg() {
   }
 }
 
-async function _webSidPlayCurrent() {
-  if (!(await _webSidInit())) return false;
-  const prgBytes = await _buildSidPreviewPrg();
-  if (!prgBytes || prgBytes.length < 3) return false;
-  // sid_init is hardcoded at $C000 by _sidExportAsmPlayable's `* = $C000` ORG;
-  // playAddress=0 tells the PSID player to use the IRQ vector installed by init.
-  return !!(await _webSidLoadPsid(_buildPsidBytes(prgBytes, 0xC000, 0x0000, "VA SID preview", "2026", _sidVoiceCount() > 3 ? _sidSid2Addr : 0)));
-}
-
-/* Loads a PSID into WebSid and starts it; resolves to the load's sequence
-   number (truthy) or false. Every load replaces the previous tune, so the
-   register stream below only trusts the load it started itself. */
-let _webSidLoadSeq = 0;
-
-function _webSidLoadPsid(psid) {
-  const seq = ++_webSidLoadSeq;
-  if (_sidStream && _sidStream.state !== "loading") _sidStream.state = "idle";
-  if (_webSidBlobUrl) { try { URL.revokeObjectURL(_webSidBlobUrl); } catch(_) {} }
-  _webSidBlobUrl = URL.createObjectURL(new Blob([psid], { type: "application/octet-stream" }));
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (ok) => { if (settled) return; settled = true; resolve(ok ? seq : false); };
-    try {
-      const p = ScriptNodePlayer.loadMusicFromURL(
-        _webSidBlobUrl,
-        { track: -1, timeout: -1, traceSID: false },
-        function() { done(false); },
-        function() {}
-      );
-      if (p && typeof p.then === "function") {
-        p.then(function() {
-          try {
-            ScriptNodePlayer.getInstance().resume();
-            _webSidActive = true;
-            _sidApplyMasterVolume();
-            done(true);
-          } catch(e) { console.warn("WebSid resume failed:", e); done(false); }
-        }).catch(function(e){ console.warn("WebSid load failed:", e); done(false); });
-      } else {
-        try {
-          ScriptNodePlayer.getInstance().resume();
-          _webSidActive = true;
-          done(true);
-        } catch(e) { done(false); }
-      }
-    } catch (e) {
-      console.warn("WebSid loadMusicFromURL threw:", e);
-      done(false);
-    }
-  });
-}
-
-function _webSidPause() {
-  if (!_webSidActive) return;
-  try { ScriptNodePlayer.getInstance()?.pause(); } catch(_) {}
-  _webSidActive = false;
-}
-
-/* ── SID register stream: every editor preview through WebSid ─────────────
- * A small PSID (JMP init / JMP play at $1000 / $1003) copies one 32-byte frame
- * per play call from a 64-frame ring at $2000 to $D400: bytes 0-24 are the
- * registers (written 24 → 0, so ADSR precedes each control register), byte 28
- * masks the voices re-triggered in that frame and bytes 25-27 hold the gate-off
- * control value written first for them, like sid_set_voice. Ring indices:
- * rd = $1F00 (player), wr = $1F01 (JS). _sidStreamPump keeps the ring a few
- * frames ahead from the JS engine: note previews (_sidStreamNote) or a
- * pattern (_sidWaStart). A two-SID tune has a second ring at $3000 for its second SID. */
-function _sidStreamPrg(chips = 1, addr = 0xD420) {
-  const two = chips > 1, lo2 = addr & 0xFF, hi2 = addr >> 8;
-  // re-triggered voices: gate-off control value first; then the registers 24 → 0
-  const chip = function(lo, hi) {
-    return [0xA0, 0x1C, 0xB1, 0xFB, 0x85, 0xFD,
-      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x19, 0xB1, 0xFB, 0x8D, lo + 0x04, hi,
-      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1A, 0xB1, 0xFB, 0x8D, lo + 0x0B, hi,
-      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1B, 0xB1, 0xFB, 0x8D, lo + 0x12, hi,
-      0xA0, 0x18, 0xB1, 0xFB, 0x99, lo, hi, 0x88, 0x10, 0xF8];
-  };
-  return [0x00, 0x10,
-    0x4C, 0x06, 0x10, 0x4C, two ? 0x1A : 0x17, 0x10,
-    // init: rd = wr = 0, clear $D400-$D418 (and the second SID)
-    0xA9, 0x00, 0x8D, 0x00, 0x1F, 0x8D, 0x01, 0x1F, 0xA2, 0x18, 0x9D, 0x00, 0xD4,
-    ...(two ? [0x9D, lo2, hi2, 0xCA, 0x10, 0xF7] : [0xCA, 0x10, 0xFA]), 0x60,
-    // play: empty ring → RTS; ($FB) = $2000 + rd * 32
-    0xAE, 0x00, 0x1F, 0xEC, 0x01, 0x1F, ...(two ? [0xD0, 0x01, 0x60] : [0xF0, 0x49]),
-    0x8A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x85, 0xFB, 0x8A, 0x4A, 0x4A, 0x4A, 0x18, 0x69, 0x20, 0x85, 0xFC,
-    ...chip(0x00, 0xD4),
-    // the second SID's ring is at $3000
-    ...(two ? [0xA5, 0xFC, 0x18, 0x69, 0x10, 0x85, 0xFC, ...chip(lo2, hi2)] : []),
-    // rd = (rd + 1) & 63
-    0xE8, 0x8A, 0x29, 0x3F, 0x8D, 0x00, 0x1F, 0x60];
-}
-
-var _sidStream = null;
-
-function _sidStreamUsable() {
-  return _webSidAvailable() && !(_sidStream && _sidStream.failed);
-}
-
-function _sidStreamEnsure() {
-  if (!_sidStreamUsable()) return null;
-  if (!_sidStream) {
-    _sidStream = { state: "idle", failed: false, wr: 0, rd: 0, frame: 0, timer: null, idleSince: 0,
-      pv: null, events: [], owner: [null, null, null], vstart: [0, 0, 0], busyUntil: 0,
-      src: null, onRows: null, slotRows: new Array(64).fill(null), prev: new Uint8Array(25), chips: 1, addr: _sidSid2Addr };
-  }
-  const st = _sidStream;
-  st.idleSince = 0;
-  // the loaded stream player drives as many SIDs as the tune has
-  const chips = _sidVoiceCount() / 3;
-  if ((st.chips !== chips || st.addr !== _sidSid2Addr) && st.state !== "loading") {
-    st.chips = chips; st.addr = _sidSid2Addr; st.prev = new Uint8Array(25 * chips); st.state = "idle";
-  }
-  if (st.state === "ready" && !_webSidActive) {
-    try { ScriptNodePlayer.getInstance().resume(); _webSidActive = true; _sidApplyMasterVolume(); } catch (_) {}
-  } else if (st.state === "idle") {
-    st.state = "loading";
-    _webSidInit().then(function(ok) {
-      return ok ? _webSidLoadPsid(_buildPsidBytes(new Uint8Array(_sidStreamPrg(st.chips, st.addr)), 0x1000, 0x1003, "VA SID stream", "2026", st.chips > 1 ? st.addr : 0)) : false;
-    }).then(function(seq) {
-      if (!seq) {
-        st.failed = true; st.state = "idle";
-        // the pattern waiting for the stream falls back to the Web Audio synth
-        if (_sidWaPlay && _sidWaPlay.stream) { _sidWaStop(); _sidWaStart(true); }
-        return;
-      }
-      if (seq !== _webSidLoadSeq) { st.state = "idle"; return; }
-      st.state = "ready"; st.wr = 0; st.rd = 0; st.prev.fill(0); st.slotRows.fill(null);
-      _webSidActive = true;
-    }).catch(function() { st.failed = true; st.state = "idle"; });
-  }
-  if (!st.timer) st.timer = setInterval(_sidStreamPump, 10);
-  return st;
-}
-
-/* Loading the stream PSID takes a moment, and any other tune loaded into WebSid
-   replaces it: reload it in the background so the next preview sounds at once. */
-function _sidStreamPreload() {
-  const seq = _webSidLoadSeq;
-  setTimeout(function() {
-    const dlg = document.getElementById("sid-editor-dialog");
-    if (seq !== _webSidLoadSeq || !dlg || !dlg.open || _sidPlaybackUsingWebSid || _webSidActive) return;
-    if (_sidStream && _sidStream.state !== "idle") return;
-    _sidStreamEnsure();
-  }, 300);
-}
-
-function _sidStreamPump() {
-  const st = _sidStream, be = _webSidBackend;
-  if (!st || st.state !== "ready" || !be) return;
-  const rd = be.getRAM(0x1F00) & 63;
-  while (st.rd !== rd) {
-    const rows = st.slotRows[st.rd];
-    st.slotRows[st.rd] = null;
-    if (rows && st.onRows) rows.forEach(st.onRows);
-    st.rd = (st.rd + 1) & 63;
-  }
-  if (!st.src && !st.events.length && st.frame >= st.busyUntil) {
-    const now = performance.now();
-    if (!st.idleSince) st.idleSince = now;
-    else if (now - st.idleSince > 4000 && ((st.wr - rd) & 63) === 0) {
-      clearInterval(st.timer); st.timer = null;
-      _webSidPause();
-    }
-    return;
-  }
-  st.idleSince = 0;
-  let queued = (st.wr - rd) & 63;
-  while (queued < 5) {
-    const fr = st.src ? st.src(st) : _sidStreamPreviewFrame(st);
-    _sidStreamWrite(st, fr.regs, fr.mask, fr.rows);
-    queued++;
-  }
-  be.setRAM(0x1F01, st.wr);
-}
-
-function _sidStreamWrite(st, regs, mask, rows) {
-  const be = _webSidBackend;
-  for (let c = 0; c < st.chips; c++) {
-    const base = 0x2000 + c * 0x1000 + st.wr * 32, at = 25 * c;
-    // a note preview's engine has one SID: the second one stays silent
-    for (let k = 0; k < 25; k++) be.setRAM(base + k, regs[at + k] | 0);
-    for (let v = 0; v < 3; v++) be.setRAM(base + 25 + v, st.prev[at + 7 * v + 4] & 0xFE);
-    be.setRAM(base + 28, (mask >> (3 * c)) & 7);
-  }
-  st.prev.fill(0);
-  st.prev.set(regs.subarray(0, st.prev.length));
-  st.slotRows[st.wr] = rows && rows.length ? rows : null;
-  st.wr = (st.wr + 1) & 63;
-}
-
-/* Drops the queued frames and releases every gate (the release tail sounds). */
-function _sidStreamSilence() {
-  const st = _sidStream;
-  if (!st) return;
-  st.src = null; st.onRows = null; st.events = []; st.pv = null; st.busyUntil = 0;
-  st.owner = [null, null, null];
-  if (st.state !== "ready" || !_webSidBackend) return;
-  st.wr = st.rd = _webSidBackend.getRAM(0x1F00) & 63;
-  st.slotRows.fill(null);
-  const regs = Uint8Array.from(st.prev);
-  for (let c = 0; c < st.chips; c++) for (let v = 0; v < 3; v++) regs[25 * c + 7 * v + 4] &= 0xFE;
-  _sidStreamWrite(st, regs, 0, null);
-  _webSidBackend.setRAM(0x1F01, st.wr);
-}
-
-function _sidStreamPreviewFrame(st) {
-  const e = st.pv || (st.pv = _sidEngineNew(_sidTuneData({ patterns: [], song: [0], speed: 255 })));
-  let mask = 0;
-  while (st.events.length && st.events[0].frame <= st.frame) {
-    const ev = st.events.shift();
-    if (ev.on) {
-      let insts = _sidInsts || [], idx = insts.indexOf(ev.inst);
-      if (idx < 0) { insts = insts.concat([ev.inst]); idx = insts.length - 1; }
-      const td = _sidTuneData({ insts: insts, patterns: [], song: [0], speed: 255 });
-      e.td = td; e.a = td.a;
-      // a free voice, else the longest released one, else the oldest note
-      const rank = function(k) { return e.v[k].on ? (e.v[k].gate ? 2 : 1) : 0; };
-      let v = 0;
-      for (let k = 1; k < 3; k++) {
-        if (rank(k) < rank(v) || (rank(k) === rank(v) && st.vstart[k] < st.vstart[v])) v = k;
-      }
-      _sidEngNoteOn(e, v, Math.max(0, Math.min(95, ev.note | 0)), idx);
-      mask |= 1 << v;
-      ev.v = v; st.owner[v] = ev; st.vstart[v] = st.frame;
-    } else if (ev.ref && ev.ref.v != null && st.owner[ev.ref.v] === ev.ref) {
-      e.v[ev.ref.v].gate = 0;
-    }
-  }
-  e.tick = 255; // no tracker rows: notes only come from the events
-  _sidEngFrame(e);
-  st.frame++;
-  return { regs: e.regs, mask: mask };
-}
-
-function _sidStreamNote(inst, note, delaySec, holdSec) {
-  // the real tune loaded in WebSid ("Play: All", even paused) must not be replaced
-  if (_sidPlaybackUsingWebSid) return false;
-  const st = _sidStreamEnsure();
-  if (!st || st.src) return false;
-  const at = st.frame + Math.max(0, Math.round(delaySec * 50));
-  const hold = Math.max(2, Math.round(Math.max(0.04, holdSec) * 50));
-  const on = { frame: at, on: true, note: note, inst: inst, v: null };
-  const add = function(ev) {
-    let k = st.events.length;
-    while (k > 0 && st.events[k - 1].frame > ev.frame) k--;
-    st.events.splice(k, 0, ev);
-  };
-  add(on);
-  add({ frame: at + hold, on: false, ref: on });
-  st.busyUntil = Math.max(st.busyUntil, at + hold + 150);
-  return true;
-}
-
 function _sidPauseBtnMarkup(isPlaying) {
   return isPlaying
     ? '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3.5" width="2.5" height="9" fill="currentColor"/><rect x="9.5" y="3.5" width="2.5" height="9" fill="currentColor"/></svg>'
@@ -2960,7 +2655,7 @@ function _sidPauseBtnMarkup(isPlaying) {
 }
 
 function _sidUpdatePauseButton() {
-  const isPlaying = !!(_sidTimer || _sidPlaybackUsingWebSid) && !_sidPaused;
+  const isPlaying = !!_sidTimer && !_sidPaused;
   ["sid-vkbd-play", "sid-roll-play"].forEach(function(id) {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -2984,16 +2679,16 @@ function _sidUpdatePauseButton() {
 // Tracker Play: start, or continue after a pause; does nothing while playing.
 function _sidPlayOnly() {
   if (_sidPaused) { _sidPlay(false); return; }
-  if (_sidTimer || _sidPlaybackUsingWebSid) return;
+  if (_sidTimer) return;
   _sidPlay(true);
 }
 
 // Tracker Pause: pause while playing, continue when paused; stopped, nothing.
 function _sidPauseOnly() {
-  if (_sidPaused || _sidTimer || _sidPlaybackUsingWebSid) _sidPauseToggle();
+  if (_sidPaused || _sidTimer) _sidPauseToggle();
 }
 
-function _webSidShowExternalDialog(filename, engine) {
+function _sidPlayerShowTune(filename, engine) {
   _sidPlayerEngineName = engine;
   _sidExtElapsed = 0;
   _sidExtSetStatus("playing");
@@ -3001,15 +2696,14 @@ function _webSidShowExternalDialog(filename, engine) {
   _sidPlayerRenderList();
 }
 
-function _webSidHideExternalDialog() {
+function _sidPlayerHideWindow() {
   const dlg = document.getElementById("websid-play-dialog");
   if (!dlg) return;
   try { if (dlg.open) dlg.close(); } catch(_) {}
 }
 
 /* Transport of the SID player. Play restarts the current tune when stopped;
- * pause suspends the AudioContext (VA SID Core) or the WebSID player, so the
- * counter only advances while sound is produced. */
+ * pause suspends the AudioContext, so the counter only advances while sound is produced. */
 let _sidExtFile = null;
 
 let _sidExtStatus = "stopped";
@@ -3078,7 +2772,7 @@ async function _sidExtStartFile(bytes, filename, song = 0) {
   const seq = ++_sidExtStartSeq;
   _sidExtStarting = true;
   try {
-    return _sidUsesVaCore() ? await _vaSidPlayFileBytes(bytes, filename, song) : await _webSidPlayFileBytes(bytes, filename, song);
+    return await _vaSidPlayFileBytes(bytes, filename, song);
   } finally {
     if (seq === _sidExtStartSeq) _sidExtStarting = false;
   }
@@ -3090,8 +2784,6 @@ function _sidExtPlay() {
     if (_sidExternalCore) {
       _sidExternalCore.paused = false;
       _sidEnsureAudio();
-    } else {
-      try { ScriptNodePlayer.getInstance()?.resume(); _webSidActive = true; } catch(_) {}
     }
     _sidExtSetStatus("playing");
     return;
@@ -3105,31 +2797,21 @@ function _sidExtPause() {
   if (_sidExternalCore) {
     _sidExternalCore.paused = true;
     if (_sidAudio) _sidAudio.suspend();
-  } else {
-    try { ScriptNodePlayer.getInstance()?.pause(); } catch(_) {}
-    _webSidActive = false;
   }
   _sidExtSetStatus("paused");
 }
 
 function _sidExtStop() {
   if (_sidExternalCore) _sidExternalCoreStop(true);
-  else {
-    try { ScriptNodePlayer.getInstance()?.pause(); } catch(_) {}
-    _webSidActive = false;
-  }
   _sidExtSetStatus("stopped");
 }
 
-// WebSID seeks natively; VA SID Core renders the skipped part silently.
-// The counter and the bar jump at once; while a seek is running only the
+// The backend runs the skipped part silently. The counter and the bar jump at once; while a seek is running only the
 // newest target is kept, so quick clicks do not queue up several seeks.
 let _sidExtSeekTarget = null;
 
 let _sidExtSeeking = false;
 
-// WebSID reports no position or length for .sid files and ignores seeks,
-// so only the VA SID Core can position the tune.
 function _sidPlayerCanSeek() {
   return _sidExtStatus !== "stopped" && !!_sidExternalCore;
 }
@@ -3154,7 +2836,6 @@ async function _sidExtSeek(ms) {
       const target = _sidExtSeekTarget;
       _sidExtSeekTarget = null;
       if (_sidExternalCore) await _vaSidSeek(_sidExternalCore, target);
-      else { try { ScriptNodePlayer.getInstance()?.seekPlaybackPosition(target); } catch(_) {} }
       // the counter restarts at the target once its sound is there
       if (_sidExtSeekTarget === null && _sidExtStatus !== "stopped") showAt(target);
     }
@@ -3167,17 +2848,20 @@ async function _sidExtSeek(ms) {
 /* ── SID player window: playlist, skip, seek ───────────────────────────
  * A .sid file has no length, so every tune gets _SID_TUNE_LENGTH_MS on the
  * seek bar; after that the playlist moves on (the last tune keeps playing). */
-function _sidVaCoreLabel() {
-  return "VA SID Core v" + _VA_SID_CORE_VERSION + " (MOS " + _sidPreviewModel + ")";
+function _sidEngineName() {
+  return _sidPreviewEngine === "resid" ? "reSID" : "VA SID Core";
+}
+function _sidEngineLabel() {
+  return (_sidPreviewEngine === "resid" ? "reSID" : "VA SID Core v" + _VA_SID_CORE_VERSION) + " (MOS " + _sidPreviewModel + ")";
 }
 
 // The SID Editor header names the emulation its previews and playback use.
 function _sidEditorEngineSync() {
   const el = document.getElementById("sid-engine-name");
-  if (el) el.textContent = "· " + (_sidUsesVaCore() ? _sidVaCoreLabel() : "WebSID");
+  if (el) el.textContent = _sidUsesNativeCore() ? "· " + _sidEngineLabel() : "";
   // the VA-VK badge names the running emulation too
   const chip = document.getElementById("sid-vkbd-brand-chip");
-  if (chip) chip.textContent = _sidUsesVaCore() ? "VA SID Core · " + _sidPreviewModel : "WebSID";
+  if (chip) chip.textContent = _sidUsesNativeCore() ? _sidEngineName() + " · " + _sidPreviewModel : "";
 }
 
 // The engine that plays the current tune; when stopped, the one Play would use.
@@ -3185,7 +2869,7 @@ let _sidPlayerEngineName = "";
 
 function _sidPlayerEngineLabel() {
   if (_sidExtStatus !== "stopped" && _sidPlayerEngineName) return _sidPlayerEngineName;
-  return _sidUsesVaCore() ? _sidVaCoreLabel() : "WebSID";
+  return _sidEngineLabel();
 }
 
 const _SID_TUNE_LENGTH_MS = 180000;
@@ -3943,8 +3627,7 @@ function _hvscRestore() {
 }
 
 /* ── SID Player spectrum analyzer (#sid-viz-dialog) ─────────────────────
- * LED-style bars: one AnalyserNode per engine (VA SID Core: after the shared
- * master gain; WebSID: on ScriptNodePlayer's own gain node), log-spaced bands,
+ * LED-style bars: an AnalyserNode after the shared master gain, log-spaced bands,
  * cells that fade out slowly, and a mirrored floor in perspective. Drawn only
  * while the window is open. State: localStorage c64va-sid-viz {open, bands, w, h}. */
 const _SID_VIZ_STORE = "c64va-sid-viz";
@@ -3963,9 +3646,7 @@ let _sidVizLevels = null;
 
 let _sidVizVa = null;
 
-let _sidVizWs = null;
 
-let _sidVizWsGain = null;
 
 let _sidVizData = null;
 
@@ -4012,21 +3693,6 @@ function _sidVizAnalysers() {
     }
     list.push(_sidVizVa);
   }
-  try {
-    const player = typeof ScriptNodePlayer !== "undefined" ? ScriptNodePlayer.getInstance() : null;
-    const gain = player?._gainNode;
-    if (gain && gain !== _sidVizWsGain) {
-      // the WebSID player made a new output chain: follow it
-      _sidVizWs = gain.context.createAnalyser();
-      _sidVizWs.fftSize = 2048;
-      _sidVizWs.minDecibels = -90;
-      _sidVizWs.maxDecibels = -25;
-      _sidVizWs.smoothingTimeConstant = 0.55;
-      gain.connect(_sidVizWs);
-      _sidVizWsGain = gain;
-    }
-    if (_sidVizWs && _webSidActive) list.push(_sidVizWs);
-  } catch (_) {}
   return list;
 }
 
@@ -4393,56 +4059,6 @@ function setupSidVisualizer() {
   if (saved.open && document.getElementById("websid-play-dialog")?.open) setTimeout(_sidVizShow, 0);
 }
 
-async function _webSidPlayFileBytes(bytes, filename, song = 0) {
-  // Accepts a raw .sid file (PSID/RSID header + code). WebSid parses it natively.
-  if (!bytes || bytes.length < 0x7C) {
-    showViceToast("A fájl túl kicsi vagy sérült .sid.", true);
-    return false;
-  }
-  const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-  if (magic !== "PSID" && magic !== "RSID") {
-    showViceToast("Nem PSID/RSID fájl: " + filename, true);
-    return false;
-  }
-  _sidStop(false, true);  // stops previews and the previous external tune
-  if (!(await _webSidInit())) {
-    showViceToast("WebSid nem elérhető ebben a WebView-ban.", true);
-    return false;
-  }
-  _webSidLoadSeq++;
-  if (_sidStream && _sidStream.state !== "loading") _sidStream.state = "idle";
-  if (_webSidBlobUrl) { try { URL.revokeObjectURL(_webSidBlobUrl); } catch(_) {} }
-  _webSidBlobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (ok, msg) => {
-      if (settled) return; settled = true;
-      if (!ok && msg) showViceToast(msg, true);
-      else if (ok) _webSidShowExternalDialog(filename, "WebSID");
-      resolve(ok);
-    };
-    try {
-      const p = ScriptNodePlayer.loadMusicFromURL(
-        _webSidBlobUrl,
-        { track: -1, timeout: -1, traceSID: false },
-        function() { done(false, "SID betöltés sikertelen: " + filename); },
-        function() {}
-      );
-      if (p && typeof p.then === "function") {
-        p.then(function() {
-          try { ScriptNodePlayer.getInstance().resume(); _webSidActive = true; _sidApplyMasterVolume(); done(true); }
-          catch(e) { done(false, "SID lejátszás hiba."); }
-        }).catch(function(){ done(false, "SID betöltés hiba."); });
-      } else {
-        try { ScriptNodePlayer.getInstance().resume(); _webSidActive = true; _sidApplyMasterVolume(); done(true); }
-        catch(e) { done(false, "SID lejátszás hiba."); }
-      }
-    } catch (e) {
-      done(false, "SID lejátszás hiba: " + (e && e.message ? e.message : e));
-    }
-  });
-}
-
 function _sidExternalCoreStop(keepDialog = false) {
   const state = _sidExternalCore;
   if (!state) return;
@@ -4452,7 +4068,7 @@ function _sidExternalCoreStop(keepDialog = false) {
   _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
   _sidExtSources.clear();
   if (state.paused && _sidAudio) _sidAudio.resume();
-  if (!keepDialog) _webSidHideExternalDialog();
+  if (!keepDialog) _sidPlayerHideWindow();
   // released at once: a render still in flight finishes on its own session
   // lock, and waiting for it let stale sessions pile up on quick switches
   window.electronAPI.releaseSidFile(state.sessionId).catch(function() {});
@@ -4460,10 +4076,10 @@ function _sidExternalCoreStop(keepDialog = false) {
 
 async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
   if (!window.electronAPI?.renderSidFile || !window.electronAPI?.releaseSidFile) {
-    showViceToast("VA SID Core file playback is unavailable.", true);
+    showViceToast(t("sidPlayerNeedsDesktop"), true);
     return false;
   }
-  _sidStop(false, true);
+  _sidStop(true);
   const ac = _sidEnsureAudio();
   // A renderer hosszú DOM-művelet alatt nem fut. Tíz másodpercnyi már az
   // AudioContext szálán ütemezett hang ezért akkor is folytatódik.
@@ -4481,7 +4097,7 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
     try {
       do {
         const payload = { sessionId: state.sessionId, sampleRate: ac.sampleRate,
-          model: _sidPreviewModel, frames: 20, skipMs: Math.max(0, Math.round(state.skipMs)), song: state.song };
+          model: _sidPreviewModel, engine: _sidPreviewEngine, frames: 20, skipMs: Math.max(0, Math.round(state.skipMs)), song: state.song };
         if (state.fileBytes) payload.fileBytes = state.fileBytes;
         state.queue = window.electronAPI.renderSidFile(payload);
         const rendered = await state.queue;
@@ -4502,7 +4118,7 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
       if (state.active) {
         // the player window stays open; only this tune stops
         _sidExtStop();
-        showViceToast("VA SID Core: " + (e?.message || e), true);
+        showViceToast(_sidEngineName() + ": " + (e?.message || e), true);
       }
       return false;
     } finally {
@@ -4519,7 +4135,7 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
     item.song = info.song;
     _sidPlayerRenderList();
   }).catch(function() {});
-  _webSidShowExternalDialog(filename, _sidVaCoreLabel());
+  _sidPlayerShowTune(filename, _sidEngineLabel());
   state.timer = setInterval(function() {
     if (state.active && !state.paused && state.nextTime - ac.currentTime < aheadRefill) pump();
   }, 50);
@@ -4552,10 +4168,9 @@ async function _vaSidSeek(state, targetMs) {
 }
 
 /* Tracker playback driven by the JS engine. The engine yields the frame of
- * every row; those become timed highlight events. With `audio` the frames are
- * also rendered through the synth (Web Audio path); without it WebSid plays the
- * real player and the engine only keeps the highlight (and F speed changes) in
- * step. Tune data is re-read for every chunk, so edits are heard while playing. */
+ * every row; those become timed highlight events, and the frames are rendered
+ * by the backend's SID (or the synth). Tune data is re-read for every chunk, so
+ * edits are heard while playing. */
 function _sidWaClock(w) {
   return w.audio ? _sidAudio.currentTime : performance.now() / 1000;
 }
@@ -4573,33 +4188,10 @@ function _sidWaStart(audio) {
     e.opos = Math.max(0, Math.min(td.song.length - 1, _sidSongPlayPos | 0));
     e.pat = td.song[e.opos] | 0;
   }
-  // the real player (WebSid) reads row 0 `speed` frames after init; the
-  // previews start the engine one frame before row 0 instead
+  // the 6502 player reads row 0 `speed` frames after init; the previews start
+  // the engine one frame before row 0 instead
   if (audio) e.tick = 1;
-  if (audio && !_sidUsesVaCore()) {
-    _sidStreamSilence();
-    const st = _sidStreamEnsure();
-    if (st) {
-      // the register stream plays the engine on the real SID; the rows of the
-      // frames the emulator has consumed drive the highlight
-      const w = _sidWaPlay = { e: e, audio: false, stream: true, events: [], next: 0, timer: null };
-      st.src = function() {
-        const td = _sidWaTune();
-        e.td = td; e.a = td.a;
-        if (e.opos >= td.song.length) { e.opos = 0; e.row = 0; }
-        if (_sidPlayMode !== "all") e.pat = td.song[0] | 0;
-        _sidEngFrame(e);
-        const rows = e.rows.splice(0);
-        return { regs: e.regs, mask: e.trig.reduce(function(m, on, v) { return on ? m | (1 << v) : m; }, 0), rows: rows };
-      };
-      st.onRows = function(r) { if (_sidWaPlay === w) _sidWaShowRow(r); };
-      // _sidTimer only marks the playback as running; _sidStreamPump feeds it
-      w.timer = setInterval(function() {}, 1000);
-      _sidTimer = w.timer;
-      return;
-    }
-  }
-  _sidWaPlay = { e: e, audio: !!audio, core: !!audio && _sidUsesVaCore(), sidCoreSession: audio && _sidUsesVaCore() ? crypto.randomUUID() : null, coreQueue: Promise.resolve(), events: [], next: 0, timer: null };
+  _sidWaPlay = { e: e, audio: !!audio, core: !!audio && _sidUsesNativeCore(), sidCoreSession: audio && _sidUsesNativeCore() ? crypto.randomUUID() : null, coreQueue: Promise.resolve(), events: [], next: 0, timer: null };
   _sidWaPlay.next = _sidWaClock(_sidWaPlay) + 0.05;
   _sidWaSchedule();
   _sidWaPlay.timer = setInterval(_sidWaSchedule, 20);
@@ -4624,12 +4216,12 @@ function _sidWaSchedule() {
         const frames = [];
         for (let k = 0; k < chunk; k++) {
           _sidEngFrame(e);
-          frames.push(_sidVaCoreFrame(e));
+          frames.push(_sidNativeFrame(e));
         }
         const playAt = w.next;
         w.coreQueue = w.coreQueue.then(function() {
           if (_sidWaPlay !== w) return;
-          return _sidRenderVaCoreFrames(frames, _sidAudio.sampleRate, w.sidCoreSession).then(function(data) {
+          return _sidRenderNativeFrames(frames, _sidAudio.sampleRate, w.sidCoreSession).then(function(data) {
             if (_sidWaPlay === w && !_sidPaused) _sidPlayBuffer(data, Math.max(_sidAudio.currentTime + 0.01, playAt));
           });
         }).catch(function(error) { console.warn("VA SID Core playback failed:", error); });
@@ -4701,7 +4293,6 @@ function _sidWaShowRow(ev) {
 function _sidWaStop() {
   const stopped = _sidWaPlay;
   if (stopped && stopped.timer) clearInterval(stopped.timer);
-  if (stopped && stopped.stream) _sidStreamSilence();
   _sidWaPlay = null;
   _sidAna.rowFrame = -1; _sidAna.last = null; _sidAna.env = [];
   if (stopped && stopped.sidCoreSession && window.electronAPI?.releaseSidPreview) {
@@ -4713,24 +4304,14 @@ function _sidWaStop() {
   _sidPreviewSources.clear();
 }
 
-function _sidStop(preloadStream = true, stopExternal = false) {
+function _sidStop(stopExternal = false) {
   if (typeof _sidVkbdClearPlay === "function") _sidVkbdClearPlay();
   if (typeof _sidRecordStop === "function") _sidRecordStop();
   if (_sidTimer) { clearInterval(_sidTimer); _sidTimer = null; }
   // Az editor saját preview-ja nem zárhatja be a külön SID Player ablakot.
   if (stopExternal && typeof _sidExternalCore !== "undefined" && _sidExternalCore) _sidExternalCoreStop();
   _sidWaStop();
-  _sidStreamSilence();
   _sidPaused = false;
-  const editorOnWebSid = _sidPlaybackUsingWebSid;
-  _sidPlaybackUsingWebSid = false;
-  if (stopExternal) _webSidPause();
-  else if (editorOnWebSid) {
-    // not _webSidPause: that would also close the SID Player window
-    try { ScriptNodePlayer.getInstance()?.pause(); } catch (_) {}
-    _webSidActive = false;
-  }
-  if (preloadStream) _sidStreamPreload();
   const t = document.getElementById("sid-tracker");
   if (t) t.querySelectorAll("tr.sid-playing").forEach(function(r){ r.classList.remove("sid-playing"); });
   _sidUpdatePauseButton();
@@ -4743,8 +4324,7 @@ async function _sidPlay(resetPosition = true) {
   _sidWaStop();
   const playAll = _sidPlayMode === "all";
   if (resetPosition) {
-    if (_sidExtStatus === "stopped") _webSidPause();
-      _sidSongPlayPos = 0;
+    _sidSongPlayPos = 0;
     if (playAll) {
       _sidPlayPat = (_sidSong && _sidSong.length) ? _sidSong[0] : 0;
       _sidSetPattern(_sidPlayPat, true);
@@ -4756,27 +4336,7 @@ async function _sidPlay(resetPosition = true) {
   }
   _sidPaused = false;
 
-  // Try WebSid first (real cycle-exact SID). Only "all" mode maps to the exported
-  // tune; the single-pattern loop is rendered by the JS engine + synth.
-  let usingWebSid = false;
-  if (playAll && !_sidUsesVaCore()) {
-    if (resetPosition || !_sidPlaybackUsingWebSid) {
-      try { usingWebSid = await _webSidPlayCurrent(); }
-      catch (e) { console.warn("WebSid path errored:", e); usingWebSid = false; }
-    } else {
-      try {
-        ScriptNodePlayer.getInstance()?.resume();
-        _webSidActive = true;
-        usingWebSid = true;
-      } catch (e) {
-        console.warn("WebSid resume errored:", e);
-        usingWebSid = false;
-      }
-    }
-  }
-  _sidPlaybackUsingWebSid = usingWebSid;
-  // resuming WebSid continues the emulator; restart the highlight from this pattern
-  _sidWaStart(!usingWebSid);
+  _sidWaStart(true);
   _sidUpdatePauseButton();
 }
 
@@ -4785,10 +4345,9 @@ function _sidPauseToggle() {
     _sidPlay(false);
     return;
   }
-  if (_sidTimer || _sidPlaybackUsingWebSid) {
-    if (_sidTimer) { clearInterval(_sidTimer); _sidTimer = null; }
+  if (_sidTimer) {
+    clearInterval(_sidTimer); _sidTimer = null;
     _sidWaStop();
-    if (_sidPlaybackUsingWebSid) _webSidPause();
     _sidPaused = true;
     _sidUpdatePauseButton();
     return;
@@ -5052,12 +4611,11 @@ function _sidEngFrame(e) {
   return e.regs;
 }
 
-/* ── Small SID synthesizer: preview fallback without WebSid ───────────────
+/* ── Small SID synthesizer: preview fallback without the backend ──────────
  * Renders one 50 Hz frame of register state: triangle/saw/pulse/noise with
  * the SID's AND-combined waveforms, test bit, ring modulation and hard sync
  * (voice 1 ← 3, 2 ← 1, 3 ← 2), an ADSR approximation and a resonant
- * state-variable filter with routing, LP/BP/HP and 3 OFF. Not cycle exact —
- * the WebSid path ("Play: All") runs the real player for that. */
+ * state-variable filter with routing, LP/BP/HP and 3 OFF. Not cycle exact. */
 function _sidSynthNew(sr) {
   return { sr: sr, ph: [0, 0, 0], env: [0, 0, 0], st: [0, 0, 0], gate: [0, 0, 0], nz: [0, 0, 0], nzc: [0, 0, 0], lp: 0, bp: 0, hp: 0 };
 }
@@ -5180,8 +4738,8 @@ function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = dat
   return src;
 }
 
-function _sidUsesVaCore() {
-  return _sidPreviewEngine === "va-core" && typeof window.electronAPI?.renderSidPreview === "function";
+function _sidUsesNativeCore() {
+  return typeof window.electronAPI?.renderSidPreview === "function";
 }
 
 function _sidDecodePcm16(base64) {
@@ -5194,8 +4752,8 @@ function _sidDecodePcm16(base64) {
   return out;
 }
 
-function _sidRenderVaCoreFrames(frames, sampleRate, sessionId) {
-  const payload = { sampleRate: Math.round(sampleRate), model: _sidPreviewModel, frames: frames };
+function _sidRenderNativeFrames(frames, sampleRate, sessionId) {
+  const payload = { sampleRate: Math.round(sampleRate), model: _sidPreviewModel, engine: _sidPreviewEngine, frames: frames };
   if (sessionId) payload.sessionId = sessionId;
   return window.electronAPI.renderSidPreview(payload).then(function(base64) {
     const pcm = _sidDecodePcm16(base64);
@@ -5204,22 +4762,22 @@ function _sidRenderVaCoreFrames(frames, sampleRate, sessionId) {
   });
 }
 
-/* One VA SID Core frame: the 25 registers per SID + the voices whose note restarted
-   (the player clears and sets the gate within the frame; the core needs the edge). */
-function _sidVaCoreFrame(engine) {
+/* One backend frame: the 25 registers per SID + the voices whose note restarted
+   (the player clears and sets the gate within the frame; the chip needs the edge). */
+function _sidNativeFrame(engine) {
   const out = Array.from(engine.regs);
   out.push(engine.trig.reduce(function(m, on, v) { return on ? m | (1 << v) : m; }, 0));
   return out;
 }
 
-function _sidRenderVaCore(engine, frameCount, sampleRate, hook) {
+function _sidRenderNative(engine, frameCount, sampleRate, hook) {
   const frames = [];
   for (let frame = 0; frame < frameCount; frame++) {
     if (hook) hook(engine, frame);
     _sidEngFrame(engine);
-    frames.push(_sidVaCoreFrame(engine));
+    frames.push(_sidNativeFrame(engine));
   }
-  return _sidRenderVaCoreFrames(frames, sampleRate);
+  return _sidRenderNativeFrames(frames, sampleRate);
 }
 
 /* ── Export ── */
@@ -7290,7 +6848,6 @@ function setupSidEditor() {
     _sidRollRestore();
     _sidAnaRestore();
     if (_sidVkbdState().open) _sidOpenVirtualKeyboard(false);
-    _sidStreamPreload();
     syncEditorButton();
   };
   const closeEditor = function() { _sidCloseVirtualKeyboard(false); _sidStop(); _sidAutosave(); dialog.close(); syncEditorButton(); };
@@ -7840,14 +7397,13 @@ function _sidApplyTranslations() {
   }
   const sidPreviewEngine = document.getElementById("sid-preview-engine");
   if (sidPreviewEngine) {
-    if (sidPreviewEngine.options[0]) sidPreviewEngine.options[0].textContent = t("sidPreviewEngineWebSid");
+    if (sidPreviewEngine.options[0]) sidPreviewEngine.options[0].textContent = t("sidPreviewEngineResid");
     if (sidPreviewEngine.options[1]) sidPreviewEngine.options[1].textContent = t("sidPreviewEngineVaCore") + " v" + _VA_SID_CORE_VERSION;
     sidPreviewEngine.value = _sidPreviewEngine;
   }
   const sidPreviewModel = document.getElementById("sid-preview-model");
   if (sidPreviewModel) {
     sidPreviewModel.value = _sidPreviewModel;
-    sidPreviewModel.disabled = _sidPreviewEngine !== "va-core";
   }
   setText("#websid-play-title", t("sidPlayerTitle"));
   setText("#websid-play-note", t("websidPlayNote"));
@@ -8130,8 +7686,7 @@ function _setupAppSettings() {
     _sidPlayerRenderList();
   });
   on("sid-preview-engine", "change", (e) => {
-    _sidPreviewEngine = e.target.value === "va-core" ? "va-core" : "websid";
-    document.getElementById("sid-preview-model").disabled = _sidPreviewEngine !== "va-core";
+    _sidPreviewEngine = e.target.value === "va-core" ? "va-core" : "resid";
     localStorage.setItem("c64va-sid-preview-engine", _sidPreviewEngine);
     if (_sidInited) _sidStop();
     _sidPlayerRenderList();

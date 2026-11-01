@@ -619,13 +619,13 @@
           <option value="es">Español</option><option value="nl">Nederlands</option><option value="pl">Polski</option><option value="it">Italiano</option>
         </select></label>
       <label class="app-settings-row"><span id="sid-preview-engine-lbl">SID engine</span>
-        <select id="sid-preview-engine" class="sid-select"><option value="websid">WebSID</option><option value="va-core">VA SID Core</option></select></label>
+        <select id="sid-preview-engine" class="sid-select"><option value="resid">reSID (resid-rs)</option><option value="va-core">VA SID Core</option></select></label>
       <label class="app-settings-row"><span id="sid-preview-model-lbl">SID chip</span>
-        <select id="sid-preview-model" class="sid-select" disabled><option value="8580">MOS 8580</option><option value="6581">MOS 6581</option></select></label>
+        <select id="sid-preview-model" class="sid-select"><option value="8580">MOS 8580</option><option value="6581">MOS 6581</option></select></label>
       <label class="app-settings-row"><span id="sid-lcd-color-lbl">LCD colour</span>
         <select id="sid-lcd-color" class="sid-select"><option value="green">Green</option><option value="red">Red</option></select></label>
       <label class="app-settings-row"><span id="sid-player-buffer-lbl">SID Player buffer</span>
-        <select id="sid-player-buffer" class="sid-select"><option value="2048">2048 (46 ms)</option><option value="4096">4096 (93 ms)</option><option value="8192">8192 (186 ms)</option><option value="16384">16384 (372 ms)</option></select></label>
+        <select id="sid-player-buffer" class="sid-select"><option value="2048">10 s</option><option value="4096">15 s</option><option value="8192">20 s</option><option value="16384">30 s</option></select></label>
       <div class="app-confirm-buttons"><button id="app-settings-close" class="primary" type="button">OK</button></div>
     </div>
   </dialog>
@@ -659,7 +659,7 @@
               <p class="about-repo"><span id="about-vma-repo-label">VMA GitHub repository:</span><br><a href="https://github.com/zstarczali/VMA" target="_blank" rel="noopener noreferrer">github.com/zstarczali/VMA</a></p>
             </div>
           </div>
-          <p class="about-sid-credit"><span id="about-sid-credit-label">WebSID player: WebSid (WebAudio version of Tiny'R'Sid) by Juergen Wothke. GitHub repository:</span> <a href="https://github.com/wothke/websid" target="_blank" rel="noopener noreferrer">https://github.com/wothke/websid</a><br>(CC BY-NC-SA 4.0)</p>
+          <p class="about-sid-credit"><span id="about-sid-credit-label">SID emulation: reSID by Dag Lem, Rust port resid-rs by Sebastian Jastrzebski. GitHub repository:</span> <a href="https://github.com/binaryfields/resid-rs" target="_blank" rel="noopener noreferrer">https://github.com/binaryfields/resid-rs</a><br>(GPLv3)</p>
         </div>
       </div>
       <button id="about-close" class="primary" type="button">Close</button>
@@ -673,9 +673,6 @@
 
   <script src="tauri-bridge.js"></script>
   <script src="i18n.js"></script>
-  <script>window.WASM_SEARCH_PATH = "lib/websid/";</script>
-  <script src="lib/websid/scriptprocessor_player.min.js"></script>
-  <script src="lib/websid/backend_websid.js"></script>
   <script src="sid-editor.js"></script>
 </body>
 </html>
