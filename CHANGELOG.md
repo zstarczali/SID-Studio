@@ -32,6 +32,8 @@ first three voices only. The BASIC DATA export numbers its lines further apart f
 
 ### Other
 
+- Settings: the LCD colour, SID engine and SID chip are loaded at startup. They used to wait for the SID Editor's
+  first opening, so the LCD looked green and the SID Player used WebSID until then.
 - About: removed the VICE credit line. The README still states the VICE origin and license of the C64 emulation.
 - GitHub Actions: a `Build installers` workflow for Windows and macOS (x64, ARM64) and Linux (x64), started by hand or
   by a `v*` tag.

@@ -628,3 +628,8 @@ test("SID player shuffle: every tune once per round, Previous steps back along t
   ctx.api.next();
   assert.equal(started.length, 6, "a new round starts after every tune has played");
 });
+
+test("the saved engine, chip and LCD colour are loaded at startup, not only with the SID Editor", () => {
+  assert.ok(fnSource("_setupAppSettings").includes("_sidLoadPreviewSettings()"));
+  assert.ok(fnSource("_sidLoadPreviewSettings").includes("_sidLcdApplyColor()"));
+});
