@@ -1894,6 +1894,7 @@ html[data-theme="c64"] .websid-play-item--current .websid-play-item-fav:not(.web
 html[data-theme="c64"] .websid-play-item--current .websid-play-item-del {
   color: #40318d;
 }
+#sid-editor-dialog > .sid-card { position: relative; }
 dialog.dlg-active[open]:not(:modal) > :first-child,
 .sid-vkbd-dialog.dlg-active > :first-child,
 .sid-trk-float.dlg-active,

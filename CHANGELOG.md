@@ -26,6 +26,7 @@
 
 - The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.
 - VA-VK: the active window's header was unreadable on the light themes.
+- SID Editor: the editor itself comes to the front when active, over its floating panels. The VA-VK button brings it back from behind.
 
 ### Manual
 
