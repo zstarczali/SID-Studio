@@ -25,6 +25,7 @@
 ### Window
 
 - The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.
+- VA-VK: the active window's header was unreadable on the light themes.
 
 ### Manual
 
