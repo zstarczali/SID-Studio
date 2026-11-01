@@ -370,7 +370,7 @@ function _setupFileMenus() {
 }
 
 /* =======================================================
-   SID EDITOR / PLAYER (3-voice tracker, Web Audio preview)
+   SID EDITOR / PLAYER (3 or 6 voice tracker, Web Audio preview)
    ======================================================= */
 const _SID_ROWS = 32;
 
@@ -379,7 +379,7 @@ let _sidInsts = null;
 // instruments
 let _sidPatterns = null;
 
-// [pattern][voice 0..2][row 0..31] = {note, inst}
+// [pattern][voice 0..2, or 0..5 with a second SID][row 0..31] = {note, inst}
 let _sidInst = 0, _sidPat = 0, _sidSpeed = 6;
 
 let _sidMetronomeEnabled = false;
@@ -522,10 +522,41 @@ function _sidInstCtrl(ins) {
   return (ins.tri?0x10:0) | (ins.saw?0x20:0) | (ins.pul?0x40:0) | (ins.noi?0x80:0) | (ins.ring?0x04:0) | (ins.sync?0x02:0);
 }
 
-function _sidNewPattern() {
+// Address of the second SID: what a PSID v3 header can state ($D420-$D7E0, $DE00-$DFE0).
+var _sidSid2Addr = 0xD420;
+
+function _sidSid2Addrs() {
+  const out = [];
+  for (let a = 0xD420; a <= 0xD7E0; a += 0x20) out.push(a);
+  for (let a = 0xDE00; a <= 0xDFE0; a += 0x20) out.push(a);
+  return out;
+}
+
+// A tune has 3 voices, or 6 with a second SID: the width of its patterns tells which.
+function _sidVoiceCount() {
+  return _sidPatterns && _sidPatterns[0] ? _sidPatterns[0].length : 3;
+}
+
+function _sidNewPattern(voices = _sidVoiceCount()) {
   const p = [];
-  for (let v = 0; v < 3; v++) { const col = []; for (let r = 0; r < _SID_ROWS; r++) col.push({ note:null, inst:0, fx:null, fxval:0 }); p.push(col); }
+  for (let v = 0; v < voices; v++) { const col = []; for (let r = 0; r < _SID_ROWS; r++) col.push({ note:null, inst:0, fx:null, fxval:0 }); p.push(col); }
   return p;
+}
+
+// Switches the tune between one and two SIDs; dropping the second one loses its voices.
+async function _sidSetSidCount(count) {
+  const voices = count * 3;
+  if (voices === _sidVoiceCount()) return;
+  const used = voices < _sidVoiceCount() && _sidPatterns.some(function(pat) {
+    return pat.slice(voices).some(function(col) { return col.some(function(c) { return c.note != null || c.fx; }); });
+  });
+  if (used && !(await _showConfirm(t("sidChipsDropConfirm")))) { _sidBuildTracker(); return; }
+  _sidStop();
+  _sidPatterns.forEach(function(pat) {
+    pat.length = Math.min(pat.length, voices);
+    while (pat.length < voices) pat.push(_sidNewPattern(1)[0]);
+  });
+  _sidBuildTracker();
 }
 
 function _sidCurInst() { return _sidInsts[_sidInst]; }
@@ -969,7 +1000,7 @@ var _sidVkbdPlayNotes = [null, null, null];
 function _sidVkbdTrackRow(ev) {
   const pat = _sidPatterns && _sidPatterns[ev.pat != null ? ev.pat : _sidPlayPat];
   if (!pat) return;
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < pat.length; v++) {
     const c = pat[v] && pat[v][ev.row];
     if (!c) continue;
     if (c.note != null) _sidVkbdPlayNotes[v] = c.note;
@@ -988,7 +1019,7 @@ function _sidVkbdRenderPlay() {
   _sidVkbdPlayNotes.forEach(function(note, v) {
     if (note == null) return;
     const key = dlg.querySelector('.sid-vkbd-key[data-note="' + note + '"]');
-    if (key) key.classList.add("sid-vkbd-key--v" + (v + 1));
+    if (key) key.classList.add("sid-vkbd-key--v" + (v % 3 + 1));
   });
 }
 
@@ -1523,7 +1554,7 @@ function _sidPasteCells() {
   const targetStartRow = _sidSelAnchor === null ? _sidSel.row : Math.min(_sidSelAnchor.row, _sidSel.row);
   for (let v = 0; v < _sidCellClip.voices; v++) {
     const targetVoice = targetStartVoice + v;
-    if (targetVoice >= 3) break;
+    if (targetVoice >= pat.length) break;
     for (let r = 0; r < _sidCellClip.rows; r++) {
       const targetRow = targetStartRow + r;
       if (targetRow >= _SID_ROWS) break;
@@ -1632,7 +1663,17 @@ function _sidShowCtxMenu(e, voice, row) {
 function _sidBuildTracker() {
   const t = document.getElementById("sid-tracker"); if (!t) return;
   const pat = _sidCurPat();
-  let html = "<thead><tr><th></th><th>VOICE 1</th><th>VOICE 2</th><th>VOICE 3</th></tr></thead><tbody>";
+  if (_sidSel.voice >= pat.length) { _sidSel.voice = pat.length - 1; _sidSelAnchor = null; }
+  const chips = document.getElementById("sid-chip-count");
+  if (chips) chips.value = String(pat.length / 3);
+  const addr = document.getElementById("sid-chip-addr");
+  if (addr) { addr.value = String(_sidSid2Addr); addr.hidden = pat.length <= 3; }
+  _sidRollSyncHeader();
+  let html = "<thead><tr><th></th>";
+  for (let v = 0; v < pat.length; v++) {
+    html += '<th' + (v === 3 ? ' class="sid-col-sid2"' : '') + '>' + (pat.length > 3 ? "S" + ((v / 3 | 0) + 1) + " V" + (v % 3 + 1) : "VOICE " + (v + 1)) + "</th>";
+  }
+  html += "</tr></thead><tbody>";
   for (let r = 0; r < _SID_ROWS; r++) {
     const beat = (r % 4 === 0) ? " sid-beat" : "";
     html += '<tr class="sid-trow'+beat+'" data-row="'+r+'">';
@@ -1641,11 +1682,11 @@ function _sidBuildTracker() {
     const rangeRowHi = _sidSelAnchor !== null ? Math.max(_sidSelAnchor.row, _sidSel.row) : _sidSel.row;
     const rangeVoiceLo = _sidSelAnchor !== null ? Math.min(_sidSelAnchor.voice, _sidSel.voice) : _sidSel.voice;
     const rangeVoiceHi = _sidSelAnchor !== null ? Math.max(_sidSelAnchor.voice, _sidSel.voice) : _sidSel.voice;
-    for (let v = 0; v < 3; v++) {
+    for (let v = 0; v < pat.length; v++) {
       const isCursor = _sidSel.voice === v && _sidSel.row === r;
       const inRange  = v >= rangeVoiceLo && v <= rangeVoiceHi && r >= rangeRowLo && r <= rangeRowHi && !isCursor;
       const selCls = isCursor ? " sid-cell--sel" : (inRange ? " sid-cell--sel-range" : "");
-      html += '<td class="sid-cell'+selCls+'" data-v="'+v+'" data-r="'+r+'">' + _sidGridCellText(pat[v][r]) + '</td>';
+      html += '<td class="sid-cell'+selCls+(v === 3 ? " sid-col-sid2" : "")+'" data-v="'+v+'" data-r="'+r+'">' + _sidGridCellText(pat[v][r]) + '</td>';
     }
     html += "</tr>";
   }
@@ -1845,7 +1886,7 @@ function _sidSetCellText(v, r) {
  * an edit shows at every song step that uses the pattern. */
 const _SID_ROLL_COLORS = ["#ffb347", "#7c9cff", "#ff6b6b", "#4ade80", "#f7d154", "#c084fc", "#38d6ff", "#ff8fd8", "#a3e635", "#fb923c", "#2dd4bf", "#e879f9"];
 
-const _SID_ROLL_VOICE = ["#38d6ff", "#ff5ccf", "#4ade80"];
+const _SID_ROLL_VOICE = ["#38d6ff", "#ff5ccf", "#4ade80", "#ffb020", "#a78bfa", "#f87171"];
 
 var _sidRollView = { row0: 0, colW: 14, rowPx: 11, lo: 36, span: 48, voice: 0, raf: 0, drag: null, hover: null, follow: true };
 
@@ -1876,7 +1917,7 @@ function _sidRollWrite(v, g, cell) {
 // notes of the whole song: { v, note, inst, start, end } in song rows
 function _sidRollNotes() {
   const total = _sidRollTotalRows(), notes = [];
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < _sidVoiceCount(); v++) {
     let cur = null;
     for (let g = 0; g < total; g++) {
       const at = _sidRollCell(v, g);
@@ -1973,6 +2014,7 @@ function _sidRollLegend(notes) {
     sw.style.background = _SID_ROLL_COLORS[i % _SID_ROLL_COLORS.length];
     const label = document.createElement("span");
     label.textContent = (i < 10 ? "0" : "") + i + " " + ((_sidInsts[i] && _sidInsts[i].name) || "");
+    chip.title = label.textContent;
     chip.append(sw, label);
     box.appendChild(chip);
   });
@@ -2086,7 +2128,12 @@ function _sidRollLoop() {
 function _sidRollSyncHeader() {
   const follow = document.getElementById("sid-roll-follow");
   if (follow) { follow.classList.toggle("sid-metronome-on", _sidRollView.follow); follow.setAttribute("aria-pressed", String(_sidRollView.follow)); }
-  document.querySelectorAll(".sid-roll-vbtn").forEach(function(b) { b.classList.toggle("active", Number(b.dataset.voice) === _sidRollView.voice); });
+  const voices = _sidVoiceCount();
+  if (_sidRollView.voice >= voices) _sidRollView.voice = voices - 1;
+  document.querySelectorAll(".sid-roll-vbtn").forEach(function(b) {
+    b.hidden = Number(b.dataset.voice) >= voices;
+    b.classList.toggle("active", Number(b.dataset.voice) === _sidRollView.voice);
+  });
   const inst = document.getElementById("sid-roll-inst");
   if (inst) inst.textContent = (_sidInst < 10 ? "0" : "") + _sidInst + " " + ((_sidCurInst() && _sidCurInst().name) || "");
 }
@@ -2250,7 +2297,7 @@ function _sidPreviewSelectedRow() {
   const when = _sidAudio.currentTime + 0.02;
   const rowSec = Math.max(_sidSpeed, 1) / 50;
   const notes = [];
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < pat.length; v++) {
     const cell = pat[v]?.[row];
     if (cell && cell.note != null) {
       const inst = _sidInsts[cell.inst] || _sidCurInst();
@@ -2604,7 +2651,7 @@ function _webSidInit() {
   return _webSidInitPromise;
 }
 
-function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026") {
+function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026", secondSid = 0) {
   const HEADER_LEN = 0x7C;
   const out = new Uint8Array(HEADER_LEN + prgBytes.length);
   const wStr = (off, str, maxLen) => {
@@ -2631,7 +2678,8 @@ function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026") 
   wStr(0x56, released, 32);
   // Flags: bit2..3 = PAL (01), bit4..5 = 6581 (01) → 0x14
   out[0x76]=0x00; out[0x77]=0x14;
-  // startPage, pageLength, secondSIDAddress = 0
+  // startPage, pageLength, secondSIDAddress = 0; PSID v3 for a second SID
+  if (secondSid) { out[5]=0x03; out[0x7A]=(secondSid - 0xD000) >> 4; }
   out.set(prgBytes, HEADER_LEN);
   return out;
 }
@@ -2658,7 +2706,7 @@ async function _webSidPlayCurrent() {
   if (!prgBytes || prgBytes.length < 3) return false;
   // sid_init is hardcoded at $C000 by _sidExportAsmPlayable's `* = $C000` ORG;
   // playAddress=0 tells the PSID player to use the IRQ vector installed by init.
-  return !!(await _webSidLoadPsid(_buildPsidBytes(prgBytes, 0xC000, 0x0000, "VA SID preview")));
+  return !!(await _webSidLoadPsid(_buildPsidBytes(prgBytes, 0xC000, 0x0000, "VA SID preview", "2026", _sidVoiceCount() > 3 ? _sidSid2Addr : 0)));
 }
 
 /* Loads a PSID into WebSid and starts it; resolves to the load's sequence
@@ -2718,22 +2766,29 @@ function _webSidPause() {
  * control value written first for them, like sid_set_voice. Ring indices:
  * rd = $1F00 (player), wr = $1F01 (JS). _sidStreamPump keeps the ring a few
  * frames ahead from the JS engine: note previews (_sidStreamNote) or a
- * pattern (_sidWaStart). */
-function _sidStreamPrg() {
+ * pattern (_sidWaStart). A two-SID tune has a second ring at $3000 for its second SID. */
+function _sidStreamPrg(chips = 1, addr = 0xD420) {
+  const two = chips > 1, lo2 = addr & 0xFF, hi2 = addr >> 8;
+  // re-triggered voices: gate-off control value first; then the registers 24 → 0
+  const chip = function(lo, hi) {
+    return [0xA0, 0x1C, 0xB1, 0xFB, 0x85, 0xFD,
+      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x19, 0xB1, 0xFB, 0x8D, lo + 0x04, hi,
+      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1A, 0xB1, 0xFB, 0x8D, lo + 0x0B, hi,
+      0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1B, 0xB1, 0xFB, 0x8D, lo + 0x12, hi,
+      0xA0, 0x18, 0xB1, 0xFB, 0x99, lo, hi, 0x88, 0x10, 0xF8];
+  };
   return [0x00, 0x10,
-    0x4C, 0x06, 0x10, 0x4C, 0x17, 0x10,
-    // init: rd = wr = 0, clear $D400-$D418
-    0xA9, 0x00, 0x8D, 0x00, 0x1F, 0x8D, 0x01, 0x1F, 0xA2, 0x18, 0x9D, 0x00, 0xD4, 0xCA, 0x10, 0xFA, 0x60,
+    0x4C, 0x06, 0x10, 0x4C, two ? 0x1A : 0x17, 0x10,
+    // init: rd = wr = 0, clear $D400-$D418 (and the second SID)
+    0xA9, 0x00, 0x8D, 0x00, 0x1F, 0x8D, 0x01, 0x1F, 0xA2, 0x18, 0x9D, 0x00, 0xD4,
+    ...(two ? [0x9D, lo2, hi2, 0xCA, 0x10, 0xF7] : [0xCA, 0x10, 0xFA]), 0x60,
     // play: empty ring → RTS; ($FB) = $2000 + rd * 32
-    0xAE, 0x00, 0x1F, 0xEC, 0x01, 0x1F, 0xF0, 0x49,
+    0xAE, 0x00, 0x1F, 0xEC, 0x01, 0x1F, ...(two ? [0xD0, 0x01, 0x60] : [0xF0, 0x49]),
     0x8A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x85, 0xFB, 0x8A, 0x4A, 0x4A, 0x4A, 0x18, 0x69, 0x20, 0x85, 0xFC,
-    // re-triggered voices: gate-off control value first
-    0xA0, 0x1C, 0xB1, 0xFB, 0x85, 0xFD,
-    0x46, 0xFD, 0x90, 0x07, 0xA0, 0x19, 0xB1, 0xFB, 0x8D, 0x04, 0xD4,
-    0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1A, 0xB1, 0xFB, 0x8D, 0x0B, 0xD4,
-    0x46, 0xFD, 0x90, 0x07, 0xA0, 0x1B, 0xB1, 0xFB, 0x8D, 0x12, 0xD4,
-    // registers 24 → 0, then rd = (rd + 1) & 63
-    0xA0, 0x18, 0xB1, 0xFB, 0x99, 0x00, 0xD4, 0x88, 0x10, 0xF8,
+    ...chip(0x00, 0xD4),
+    // the second SID's ring is at $3000
+    ...(two ? [0xA5, 0xFC, 0x18, 0x69, 0x10, 0x85, 0xFC, ...chip(lo2, hi2)] : []),
+    // rd = (rd + 1) & 63
     0xE8, 0x8A, 0x29, 0x3F, 0x8D, 0x00, 0x1F, 0x60];
 }
 
@@ -2748,16 +2803,21 @@ function _sidStreamEnsure() {
   if (!_sidStream) {
     _sidStream = { state: "idle", failed: false, wr: 0, rd: 0, frame: 0, timer: null, idleSince: 0,
       pv: null, events: [], owner: [null, null, null], vstart: [0, 0, 0], busyUntil: 0,
-      src: null, onRows: null, slotRows: new Array(64).fill(null), prev: new Uint8Array(25) };
+      src: null, onRows: null, slotRows: new Array(64).fill(null), prev: new Uint8Array(25), chips: 1, addr: _sidSid2Addr };
   }
   const st = _sidStream;
   st.idleSince = 0;
+  // the loaded stream player drives as many SIDs as the tune has
+  const chips = _sidVoiceCount() / 3;
+  if ((st.chips !== chips || st.addr !== _sidSid2Addr) && st.state !== "loading") {
+    st.chips = chips; st.addr = _sidSid2Addr; st.prev = new Uint8Array(25 * chips); st.state = "idle";
+  }
   if (st.state === "ready" && !_webSidActive) {
     try { ScriptNodePlayer.getInstance().resume(); _webSidActive = true; _sidApplyMasterVolume(); } catch (_) {}
   } else if (st.state === "idle") {
     st.state = "loading";
     _webSidInit().then(function(ok) {
-      return ok ? _webSidLoadPsid(_buildPsidBytes(new Uint8Array(_sidStreamPrg()), 0x1000, 0x1003, "VA SID stream")) : false;
+      return ok ? _webSidLoadPsid(_buildPsidBytes(new Uint8Array(_sidStreamPrg(st.chips, st.addr)), 0x1000, 0x1003, "VA SID stream", "2026", st.chips > 1 ? st.addr : 0)) : false;
     }).then(function(seq) {
       if (!seq) {
         st.failed = true; st.state = "idle";
@@ -2816,11 +2876,16 @@ function _sidStreamPump() {
 }
 
 function _sidStreamWrite(st, regs, mask, rows) {
-  const be = _webSidBackend, base = 0x2000 + st.wr * 32;
-  for (let k = 0; k < 25; k++) be.setRAM(base + k, regs[k]);
-  for (let v = 0; v < 3; v++) be.setRAM(base + 25 + v, st.prev[7 * v + 4] & 0xFE);
-  be.setRAM(base + 28, mask);
-  st.prev.set(regs);
+  const be = _webSidBackend;
+  for (let c = 0; c < st.chips; c++) {
+    const base = 0x2000 + c * 0x1000 + st.wr * 32, at = 25 * c;
+    // a note preview's engine has one SID: the second one stays silent
+    for (let k = 0; k < 25; k++) be.setRAM(base + k, regs[at + k] | 0);
+    for (let v = 0; v < 3; v++) be.setRAM(base + 25 + v, st.prev[at + 7 * v + 4] & 0xFE);
+    be.setRAM(base + 28, (mask >> (3 * c)) & 7);
+  }
+  st.prev.fill(0);
+  st.prev.set(regs.subarray(0, st.prev.length));
   st.slotRows[st.wr] = rows && rows.length ? rows : null;
   st.wr = (st.wr + 1) & 63;
 }
@@ -2835,7 +2900,7 @@ function _sidStreamSilence() {
   st.wr = st.rd = _webSidBackend.getRAM(0x1F00) & 63;
   st.slotRows.fill(null);
   const regs = Uint8Array.from(st.prev);
-  for (let v = 0; v < 3; v++) regs[7 * v + 4] &= 0xFE;
+  for (let c = 0; c < st.chips; c++) for (let v = 0; v < 3; v++) regs[25 * c + 7 * v + 4] &= 0xFE;
   _sidStreamWrite(st, regs, 0, null);
   _webSidBackend.setRAM(0x1F01, st.wr);
 }
@@ -4085,6 +4150,223 @@ function _sidVizSetBands(n) {
   _sidVizSave({ bands: _sidVizBands });
 }
 
+/* ── SID Editor channel spectrum (#sid-ana) ──────────────────────────────
+ * One LED spectrum per voice. The audio output is one mix, so each voice's
+ * spectrum is computed from the registers the engine plays: the harmonics of its
+ * waveform at its frequency, an ADSR approximation, the filter and the volume.
+ * While the window is open the playing engine records its frames (e.snap); the
+ * row events, which follow the audio in every engine, say how far they have
+ * sounded. Note previews have no engine frames here and do not show. */
+var _sidAna = { raf: 0, env: [], levels: [], rowFrame: -1, rowAt: 0, last: null };
+
+const _SID_ANA_BANDS = 16;
+
+const _SID_ANA_ROWS = 10;
+
+const _SID_ANA_DB = 48;
+
+/* One 50 Hz frame of a voice's envelope: { env 0..1, st 0 release / 1 attack / 2 decay, gate }. */
+function _sidAnaEnvStep(s, regs, b, trig) {
+  const g = regs[b + 4] & 1;
+  if (g && (!s.gate || trig)) s.st = 1;
+  else if (!g && s.gate) s.st = 0;
+  s.gate = g;
+  const su = (regs[b + 6] >> 4) / 15;
+  if (s.st === 1) {
+    s.env += 20 / _SID_ATK[regs[b + 5] >> 4];
+    if (s.env >= 1) { s.env = 1; s.st = 2; }
+  } else if (s.st === 2) {
+    s.env = su + (s.env - su) * Math.exp(-92 / _SID_DCR[regs[b + 5] & 15]);
+  } else {
+    s.env *= Math.exp(-92 / _SID_DCR[regs[b + 6] & 15]);
+  }
+  return s.env;
+}
+
+// Gain of the SID filter at hz for a chip's registers, for a voice routed through it.
+function _sidAnaFilterGain(regs, at, hz) {
+  const mode = regs[at + 0x18];
+  const fc = Math.max(30, 30 + ((regs[at + 0x15] & 7) | (regs[at + 0x16] << 3)) * 5.8);
+  const r = hz / fc, r2 = r * r, den = Math.sqrt(1 + r2 * r2);
+  let gain = 0;
+  if (mode & 0x10) gain = Math.max(gain, 1 / den);
+  if (mode & 0x20) gain = Math.max(gain, r / den);
+  if (mode & 0x40) gain = Math.max(gain, r2 / den);
+  return gain;
+}
+
+/* Band levels 0..1 of one voice: at = the chip's first register, bit = its voice 0..2.
+   Combined waveforms sound like the AND of the two: the weaker harmonic counts. */
+function _sidAnaVoiceLevels(regs, at, bit, env, bands) {
+  const out = new Array(bands).fill(0);
+  const b = at + bit * 7, ctl = regs[b + 4], mode = regs[at + 0x18];
+  const hz = (regs[b] | (regs[b + 1] << 8)) * 985248 / 16777216;
+  const routed = (regs[at + 0x17] >> bit) & 1;
+  const vol = env * (mode & 15) / 15;
+  if (!(ctl & 0xF0) || (ctl & 8) || hz < 1 || vol <= 0 || (bit === 2 && !routed && (mode & 0x80))) return out;
+  const edges = _sidVizBandEdges(bands, 44100);
+  const duty = (regs[b + 2] | ((regs[b + 3] & 15) << 8)) / 4096;
+  const put = function(band, f, amp) {
+    const a = amp * vol * (routed ? _sidAnaFilterGain(regs, at, f) : 1);
+    if (a > 0) out[band] = Math.max(out[band], Math.min(1, 1 + 20 * Math.log10(a) / _SID_ANA_DB));
+  };
+  for (let n = 1; n * hz < edges[bands]; n++) {
+    const f = n * hz;
+    if (f < edges[0]) continue;
+    let band = 0;
+    while (band < bands - 1 && f >= edges[band + 1]) band++;
+    let amp = Infinity;
+    if (ctl & 0x10) amp = Math.min(amp, n & 1 ? 1 / (n * n) : 0);
+    if (ctl & 0x20) amp = Math.min(amp, 1 / n);
+    if (ctl & 0x40) amp = Math.min(amp, Math.abs(Math.sin(Math.PI * n * duty)) / n);
+    if (amp !== Infinity && !(ctl & 0x80)) put(band, f, amp);
+  }
+  // noise: flat up to about eight times the set frequency
+  if (ctl & 0x80) {
+    for (let k = 0; k < bands; k++) {
+      const f = Math.sqrt(edges[k] * edges[k + 1]);
+      if (f <= hz * 8) put(k, f, 0.35);
+    }
+  }
+  return out;
+}
+
+// A playing engine records its frames while the window is open.
+function _sidAnaAttach() {
+  const box = document.getElementById("sid-ana");
+  const on = !!box && !box.hidden;
+  if (_sidWaPlay && _sidWaPlay.e) {
+    if (on && !_sidWaPlay.e.snap) _sidWaPlay.e.snap = [];
+    if (!on) _sidWaPlay.e.snap = null;
+  }
+}
+
+function _sidAnaRow(ev) {
+  _sidAna.rowFrame = ev.frame || 0;
+  _sidAna.rowAt = performance.now();
+}
+
+/* Takes the recorded frames that have sounded by now (the frames of a row are 20 ms
+   apart, and at most one long row runs on from the last row event). */
+function _sidAnaAdvance(now) {
+  const e = _sidWaPlay && _sidWaPlay.e;
+  if (!e || !e.snap || _sidAna.rowFrame < 0) return;
+  const target = _sidAna.rowFrame + Math.min(255, Math.floor((now - _sidAna.rowAt) / 20));
+  while (e.snap.length && e.snap[0].frame <= target) {
+    const fr = e.snap.shift();
+    fr.trig.forEach(function(trig, v) {
+      const s = _sidAna.env[v] || (_sidAna.env[v] = { env: 0, st: 0, gate: 0 });
+      _sidAnaEnvStep(s, fr.regs, 25 * (v / 3 | 0) + 7 * (v % 3), trig);
+    });
+    _sidAna.last = fr.regs;
+  }
+}
+
+function _sidAnaDraw() {
+  const cv = document.getElementById("sid-ana-canvas");
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(cv.clientWidth * dpr)), H = Math.max(1, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+  _sidAnaAdvance(performance.now());
+  const voices = _sidVoiceCount(), rows = voices / 3;
+  const bands = _SID_ANA_BANDS, led = _SID_ANA_ROWS;
+  const cellW = W / 3, cellH = H / rows, pad = 8 * dpr, label = 14 * dpr;
+  const playing = !!_sidWaPlay;
+  ctx.font = "700 " + Math.round(10 * dpr) + "px 'IBM Plex Mono', monospace";
+  ctx.textBaseline = "top";
+  for (let v = 0; v < voices; v++) {
+    const chip = v / 3 | 0, bit = v % 3, s = _sidAna.env[v];
+    const regs = _sidAna.last;
+    const raw = playing && regs && s && 25 * chip + 25 <= regs.length
+      ? _sidAnaVoiceLevels(regs, 25 * chip, bit, s.env, bands) : null;
+    const lv = _sidAna.levels[v] || (_sidAna.levels[v] = new Float32Array(bands));
+    const x0 = bit * cellW + pad, y0 = chip * cellH + pad;
+    ctx.fillStyle = _SID_ROLL_VOICE[v];
+    ctx.fillText(voices > 3 ? "S" + (chip + 1) + " V" + (bit + 1) : "V" + (bit + 1), x0, y0);
+    const colW = (cellW - pad * 2) / bands, rowH = (cellH - pad * 2 - label) / led;
+    for (let k = 0; k < bands; k++) {
+      // bars rise at once and fall smoothly, like the SID Player's analyzer
+      lv[k] = Math.max(raw ? raw[k] : 0, lv[k] - 0.035);
+      const lit = lv[k] * led;
+      for (let r = 0; r < led; r++) {
+        const on = Math.max(0, Math.min(1, lit - r));
+        ctx.fillStyle = "hsla(" + _sidVizRowHue(r, led) + ", 82%, 52%, " + Math.max(0.06, on).toFixed(3) + ")";
+        ctx.fillRect(x0 + k * colW + colW * 0.11, y0 + label + (led - 1 - r) * rowH + rowH * 0.09, colW * 0.78, rowH * 0.82);
+      }
+    }
+  }
+}
+
+function _sidAnaLoop() {
+  _sidAna.raf = 0;
+  const box = document.getElementById("sid-ana");
+  if (!box || box.hidden || !document.getElementById("sid-editor-dialog")?.open) return;
+  _sidAnaAttach();
+  _sidAnaDraw();
+  _sidAna.raf = requestAnimationFrame(_sidAnaLoop);
+}
+
+function _sidAnaState() {
+  try { return JSON.parse(localStorage.getItem("c64va-sid-ana") || "{}") || {}; } catch (_) { return {}; }
+}
+
+function _sidAnaSave(patch) {
+  try { localStorage.setItem("c64va-sid-ana", JSON.stringify(Object.assign(_sidAnaState(), patch))); } catch (_) {}
+}
+
+function _sidAnaShow(on) {
+  const box = document.getElementById("sid-ana");
+  if (!box) return;
+  box.hidden = !on;
+  const btn = document.getElementById("sid-ana-btn");
+  if (btn) { btn.classList.toggle("sid-metronome-on", !!on); btn.setAttribute("aria-pressed", String(!!on)); }
+  _sidAnaSave({ open: !!on });
+  _sidAnaAttach();
+  if (!on) return;
+  const st = _sidAnaState();
+  if (Number.isFinite(st.width)) box.style.width = st.width + "px";
+  if (Number.isFinite(st.height)) box.style.height = st.height + "px";
+  const x = Number.isFinite(st.left) ? st.left : 120, y = Number.isFinite(st.top) ? st.top : 160;
+  _sidPlaceFixed(box, x, y);
+  requestAnimationFrame(function() { _sidPlaceFixed(box, x, y); });
+  if (!_sidAna.raf) _sidAna.raf = requestAnimationFrame(_sidAnaLoop);
+}
+
+function _sidAnaRestore() {
+  if (_sidAnaState().open) _sidAnaShow(true);
+}
+
+function _sidSetupAna() {
+  const box = document.getElementById("sid-ana");
+  const hdr = box && box.querySelector(".sid-trk-float-hdr");
+  if (!box || !hdr) return;
+  document.getElementById("sid-ana-btn")?.addEventListener("click", function() { _sidAnaShow(box.hidden); });
+  document.getElementById("sid-ana-close")?.addEventListener("click", function() { _sidAnaShow(false); });
+  let move = null, sizeAtDown = null;
+  hdr.addEventListener("pointerdown", function(e) {
+    if (e.target.closest("button")) return;
+    const rect = box.getBoundingClientRect();
+    move = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    try { hdr.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  hdr.addEventListener("pointermove", function(e) { if (move) _sidDragTo(move, box, e.clientX - move.dx, e.clientY - move.dy); });
+  const endMove = function() { _sidDragFlush(move, box); if (move && move.at) _sidAnaSave({ left: move.at.x, top: move.at.y }); move = null; };
+  hdr.addEventListener("pointerup", endMove);
+  hdr.addEventListener("pointercancel", endMove);
+  box.addEventListener("pointerdown", function() { sizeAtDown = { w: box.offsetWidth, h: box.offsetHeight }; });
+  window.addEventListener("pointerup", function() {
+    if (!sizeAtDown) return;
+    const w = box.offsetWidth, h = box.offsetHeight;
+    if (w > 0 && h > 0 && (w !== sizeAtDown.w || h !== sizeAtDown.h)) _sidAnaSave({ width: w, height: h });
+    sizeAtDown = null;
+  });
+}
+
 function setupSidVisualizer() {
   const dlg = document.getElementById("sid-viz-dialog");
   if (!dlg) return;
@@ -4202,15 +4484,17 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
           model: _sidPreviewModel, frames: 20, skipMs: Math.max(0, Math.round(state.skipMs)), song: state.song };
         if (state.fileBytes) payload.fileBytes = state.fileBytes;
         state.queue = window.electronAPI.renderSidFile(payload);
-        const pcm = _sidDecodePcm16(await state.queue);
+        const rendered = await state.queue;
+        const pcm = _sidDecodePcm16(rendered.pcm);
         if (!state.active) return false;
         if (!pcm.length) throw new Error("Empty SID audio buffer.");
+        const samples = pcm.length / rendered.channels;
         state.fileBytes = null;
-        state.renderedMs += state.skipMs + pcm.length * 1000 / ac.sampleRate;
+        state.renderedMs += state.skipMs + samples * 1000 / ac.sampleRate;
         state.skipMs = 0;
         state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
-        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources);
-        state.nextTime += pcm.length / ac.sampleRate;
+        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels);
+        state.nextTime += samples / ac.sampleRate;
         // A Web Audio szál előre ütemezett hangja UI-terhelés alatt is tovább szól.
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < aheadTarget);
       return true;
@@ -4306,7 +4590,7 @@ function _sidWaStart(audio) {
         if (_sidPlayMode !== "all") e.pat = td.song[0] | 0;
         _sidEngFrame(e);
         const rows = e.rows.splice(0);
-        return { regs: e.regs, mask: (e.trig[0] ? 1 : 0) | (e.trig[1] ? 2 : 0) | (e.trig[2] ? 4 : 0), rows: rows };
+        return { regs: e.regs, mask: e.trig.reduce(function(m, on, v) { return on ? m | (1 << v) : m; }, 0), rows: rows };
       };
       st.onRows = function(r) { if (_sidWaPlay === w) _sidWaShowRow(r); };
       // _sidTimer only marks the playback as running; _sidStreamPump feeds it
@@ -4394,6 +4678,7 @@ function _sidLcdIdle() {
 
 function _sidWaShowRow(ev) {
   _sidRow = ev.row;
+  _sidAnaRow(ev);
   _sidLcdShow(_sidPlayMode === "all" ? ev.opos : _sidSongPos, ev.pat, ev.row, ev.frame || 0, true);
   if (_sidPlayMode === "all") {
     _sidSongPlayPos = ev.opos;
@@ -4418,6 +4703,7 @@ function _sidWaStop() {
   if (stopped && stopped.timer) clearInterval(stopped.timer);
   if (stopped && stopped.stream) _sidStreamSilence();
   _sidWaPlay = null;
+  _sidAna.rowFrame = -1; _sidAna.last = null; _sidAna.env = [];
   if (stopped && stopped.sidCoreSession && window.electronAPI?.releaseSidPreview) {
     stopped.coreQueue.finally(function() {
       window.electronAPI.releaseSidPreview(stopped.sidCoreSession).catch(function() {});
@@ -4561,7 +4847,8 @@ function _sidTuneData(opts) {
     a.itsp.push(o.tableSpeed);
     if (at < 0) steps.forEach(function(x){ a.tw.push(x[0]); a.tn.push(x[1]); a.ta.push(x[2]); });
   });
-  return { speed: speed, insts: insts, patterns: patterns, song: song.length ? song : [0], a: a };
+  const chips = patterns[0] && patterns[0].length > 3 ? 2 : 1;
+  return { speed: speed, insts: insts, patterns: patterns, song: song.length ? song : [0], a: a, chips: chips };
 }
 
 /* Cell → player bytes: note 1..96 (0 = none), instrument (out-of-range → 0), fx code, fx value. */
@@ -4574,17 +4861,22 @@ function _sidCellBytes(c, instCount) {
 
 /* ── JS engine: a frame-exact model of the exported 6502 player ─────────────
  * One _sidEngFrame call = one IRQ of the player (sid_frame). It keeps the SID
- * registers the player has written in e.regs; the Web Audio preview renders
- * them with _sidSynthRender, and the tests compare them with the 6502 code. */
+ * registers the player has written in e.regs (25 per SID, the second SID's
+ * after the first's); the Web Audio preview renders them with _sidSynthRender,
+ * and the tests compare them with the 6502 code. Filter and volume are per SID. */
 function _sidEngineNew(td) {
   const voice = function() {
     return { on:0, inst:0, note:0, gate:0, jon:0, ffr:0, ctl:0, sl:0, fvo:0, fvs:0, fvc:0,
       vdl:0, vcn:0, vdr:0, vof:0, vst:0, pw:0, pwd:0, tpos:0, tcnt:0, wav:0, nof:0, nab:0 };
   };
-  return { td: td, a: td.a, ft: _sidFreqTables(), regs: new Uint8Array(25), trig: [false, false, false],
+  const filter = function() {
+    return { own: 0xFF, cut: 0, spd: 0, tgt: 0, start: 0, end: 0, ping: 0, res: 0, mode: 0, route: 0 };
+  };
+  const chips = td.chips, voices = chips * 3;
+  return { td: td, a: td.a, ft: _sidFreqTables(), chips: chips, base: [0, 7, 14, 25, 32, 39].slice(0, voices),
+    regs: new Uint8Array(25 * chips), trig: new Array(voices).fill(false),
     tick: td.speed, spd: td.speed, row: 0, opos: 0, pat: td.song[0] | 0, frame: 0, rows: [],
-    v: [voice(), voice(), voice()], vol: 0,
-    f: { own: 0xFF, cut: 0, spd: 0, tgt: 0, start: 0, end: 0, ping: 0, res: 0, mode: 0, route: 0 } };
+    v: Array.from({ length: voices }, voice), vols: [0, 0], fs: [filter(), filter()] };
 }
 
 function _sidEngTab(e, s, k) {
@@ -4595,7 +4887,7 @@ function _sidEngTab(e, s, k) {
 }
 
 function _sidEngNoteOn(e, v, n, i) {
-  const a = e.a, s = e.v[v], f = e.f, base = 7 * v;
+  const a = e.a, s = e.v[v], chip = v / 3 | 0, f = e.fs[chip], base = e.base[v];
   s.ctl &= 0xFE;
   e.regs[base + 4] = s.ctl;
   e.trig[v] = true;
@@ -4613,22 +4905,22 @@ function _sidEngNoteOn(e, v, n, i) {
   if (a.itln[i]) _sidEngTab(e, s, a.itst[i]);
   e.regs[base + 5] = a.iad[i];
   e.regs[base + 6] = a.isr[i];
-  e.vol = a.ivol[i];
+  e.vols[chip] = a.ivol[i];
   if (a.ifl[i] & 1) {
     f.own = v;
     f.cut = f.start = a.icul[i] | (a.icuh[i] << 8);
     f.end = f.tgt = a.icel[i] | (a.iceh[i] << 8);
     f.spd = a.icsp[i]; f.ping = a.ifl[i] & 2; f.res = a.ires[i]; f.mode = a.imode[i];
-    f.route |= 1 << v;
+    f.route |= 1 << (v % 3);
   } else {
-    f.route &= ~(1 << v) & 0xFF;
+    f.route &= ~(1 << (v % 3)) & 0xFF;
   }
 }
 
 function _sidEngRow(e) {
   const td = e.td, pat = td.patterns[e.pat];
   e.rows.push({ frame: e.frame, row: e.row, opos: e.opos, pat: e.pat });
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < e.v.length; v++) {
     const b = _sidCellBytes(pat ? pat[v][e.row] : null, td.insts.length);
     const s = e.v[v];
     if (b[0]) _sidEngNoteOn(e, v, b[0] - 1, b[1]);
@@ -4658,7 +4950,7 @@ function _sidEngRow(e) {
    this voice the gate is cleared (and with hard restart ADSR is zeroed). */
 function _sidEngHr(e) {
   const a = e.a;
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < e.v.length; v++) {
     const s = e.v[v];
     if (!s.on) continue;
     const gt = a.igt[s.inst];
@@ -4666,16 +4958,16 @@ function _sidEngHr(e) {
     const pat = e.td.patterns[e.pat];
     if (!_sidCellBytes(pat ? pat[v][e.row] : null, e.td.insts.length)[0]) continue;
     s.gate = 0;
-    if (a.ihr[s.inst]) { e.regs[7 * v + 5] = 0; e.regs[7 * v + 6] = 0; }
+    if (a.ihr[s.inst]) { e.regs[e.base[v] + 5] = 0; e.regs[e.base[v] + 6] = 0; }
   }
 }
 
 function _sidEngUpdate(e) {
-  const a = e.a, f = e.f;
-  for (let v = 0; v < 3; v++) {
+  const a = e.a;
+  for (let v = 0; v < e.v.length; v++) {
     const s = e.v[v];
     if (!s.on) continue;
-    const i = s.inst, base = 7 * v;
+    const i = s.inst, base = e.base[v];
     let ctl;
     if (s.jon) {
       s.jon = 0;
@@ -4724,34 +5016,38 @@ function _sidEngUpdate(e) {
       }
     }
   }
-  e.regs[0x15] = f.cut & 7;
-  e.regs[0x16] = (f.cut >> 3) & 0xFF;
-  e.regs[0x17] = (f.res | f.route) & 0xFF;
-  e.regs[0x18] = (f.mode | e.vol) & 0xFF;
-  if (f.own !== 0xFF && f.spd) {
-    let reach;
-    if (f.spd < 0x80) {
-      f.cut = (f.cut + f.spd) & 0xFFFF;
-      reach = f.cut >= f.tgt;
-    } else {
-      const c = f.cut + f.spd - 256;
-      f.cut = c & 0xFFFF;
-      reach = c < 0 || c <= f.tgt;
-    }
-    if (reach) {
-      f.cut = f.tgt;
-      if (f.ping) { f.tgt = f.tgt === f.end ? f.start : f.end; f.spd = (256 - f.spd) & 0xFF; }
-      else f.spd = 0;
+  for (let c = 0; c < e.chips; c++) {
+    const f = e.fs[c], at = 25 * c;
+    e.regs[at + 0x15] = f.cut & 7;
+    e.regs[at + 0x16] = (f.cut >> 3) & 0xFF;
+    e.regs[at + 0x17] = (f.res | f.route) & 0xFF;
+    e.regs[at + 0x18] = (f.mode | e.vols[c]) & 0xFF;
+    if (f.own !== 0xFF && f.spd) {
+      let reach;
+      if (f.spd < 0x80) {
+        f.cut = (f.cut + f.spd) & 0xFFFF;
+        reach = f.cut >= f.tgt;
+      } else {
+        const cut = f.cut + f.spd - 256;
+        f.cut = cut & 0xFFFF;
+        reach = cut < 0 || cut <= f.tgt;
+      }
+      if (reach) {
+        f.cut = f.tgt;
+        if (f.ping) { f.tgt = f.tgt === f.end ? f.start : f.end; f.spd = (256 - f.spd) & 0xFF; }
+        else f.spd = 0;
+      }
     }
   }
 }
 
 function _sidEngFrame(e) {
-  e.trig[0] = e.trig[1] = e.trig[2] = false;
+  e.trig.fill(false);
   e.tick = (e.tick - 1) & 0xFF;
   if (!e.tick) { e.tick = e.spd; _sidEngRow(e); }
   _sidEngHr(e);
   _sidEngUpdate(e);
+  if (e.snap) e.snap.push({ frame: e.frame, regs: e.regs.slice(), trig: e.trig.slice() });
   e.frame++;
   return e.regs;
 }
@@ -4841,24 +5137,40 @@ function _sidSynthRender(sy, regs, trig, out, off, count) {
 /* Runs the engine for `frames` frames and renders the audio. hook(e, frame)
    runs before each frame (note previews trigger notes / release from it). */
 function _sidRenderEngine(e, frames, sr, hook) {
-  const sy = e.synth || (e.synth = _sidSynthNew(sr));
+  const synths = e.synths || (e.synths = Array.from({ length: e.chips }, function() { return _sidSynthNew(sr); }));
   const total = Math.ceil(frames * sr / 50);
-  const out = new Float32Array(total);
+  const parts = synths.map(function() { return new Float32Array(total); });
   let pos = 0, acc = 0;
   for (let k = 0; k < frames; k++) {
     if (hook) hook(e, k);
     _sidEngFrame(e);
     acc += sr / 50;
     const n = Math.min(total - pos, Math.floor(acc) - pos);
-    if (n > 0) { _sidSynthRender(sy, e.regs, e.trig, out, pos, n); pos += n; }
+    if (n > 0) {
+      synths.forEach(function(sy, c) {
+        _sidSynthRender(sy, e.regs.subarray(25 * c, 25 * c + 25), e.trig.slice(3 * c, 3 * c + 3), parts[c], pos, n);
+      });
+      pos += n;
+    }
   }
+  if (parts.length === 1) return parts[0];
+  // SID 1 left, SID 2 right
+  const out = new Float32Array(total * 2);
+  for (let i = 0; i < total; i++) { out[i * 2] = parts[0][i]; out[i * 2 + 1] = parts[1][i]; }
+  out.channels = 2;
   return out;
 }
 
-function _sidPlayBuffer(data, when, sources = _sidPreviewSources) {
+// channels: 1, or 2 for interleaved stereo (tunes with several SIDs)
+function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = data.channels || 1) {
   const ac = _sidEnsureAudio();
-  const buf = ac.createBuffer(1, Math.max(1, data.length), ac.sampleRate);
-  buf.copyToChannel(data, 0);
+  const samples = Math.max(1, data.length / channels);
+  const buf = ac.createBuffer(channels, samples, ac.sampleRate);
+  for (let c = 0; c < channels; c++) {
+    const out = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) out[i] = data[i * channels + c] || 0;
+    buf.copyToChannel(out, c);
+  }
   const src = ac.createBufferSource();
   src.buffer = buf;
   src.connect(_sidMasterGain || ac.destination);
@@ -4885,14 +5197,18 @@ function _sidDecodePcm16(base64) {
 function _sidRenderVaCoreFrames(frames, sampleRate, sessionId) {
   const payload = { sampleRate: Math.round(sampleRate), model: _sidPreviewModel, frames: frames };
   if (sessionId) payload.sessionId = sessionId;
-  return window.electronAPI.renderSidPreview(payload).then(_sidDecodePcm16);
+  return window.electronAPI.renderSidPreview(payload).then(function(base64) {
+    const pcm = _sidDecodePcm16(base64);
+    if (frames[0].length > 26) pcm.channels = 2;
+    return pcm;
+  });
 }
 
-/* One VA SID Core frame: the 25 registers + the voices whose note restarted
+/* One VA SID Core frame: the 25 registers per SID + the voices whose note restarted
    (the player clears and sets the gate within the frame; the core needs the edge). */
 function _sidVaCoreFrame(engine) {
   const out = Array.from(engine.regs);
-  out.push((engine.trig[0] ? 1 : 0) | (engine.trig[1] ? 2 : 0) | (engine.trig[2] ? 4 : 0));
+  out.push(engine.trig.reduce(function(m, on, v) { return on ? m | (1 << v) : m; }, 0));
   return out;
 }
 
@@ -4926,6 +5242,8 @@ function _sidInstBytes(ins) {
  * _sidDeserialize below reads the marker and picks the matching cell size. */
 /* 0xFD format (current): [0xFD][ni][np][speed], per instrument the 9 classic
  * bytes + the extension below + its name, then the 4-byte cells and the song.
+ * 0xFC is the same with 6 voices per pattern (a tune with a second SID), and a
+ * byte after the speed: the second SID's address as in a PSID header ($42 = $D420).
  * 0xFE (effect column, no extension) and the unmarked legacy layout still load. */
 function _sidInstExtBytes(ins) {
   const o = _sidInstNorm(ins);
@@ -4963,13 +5281,15 @@ function _sidReadInstExt(ins, src, p) {
 }
 
 function _sidSerialize() {
-  const out = [0xFD, _sidInsts.length, _sidPatterns.length, Math.max(1, Math.min(255, _sidSpeed | 0))];
+  const voices = _sidVoiceCount();
+  const out = [voices > 3 ? 0xFC : 0xFD, _sidInsts.length, _sidPatterns.length, Math.max(1, Math.min(255, _sidSpeed | 0))];
+  if (voices > 3) out.push((_sidSid2Addr - 0xD000) >> 4);
   _sidInsts.forEach(function(ins){
     _sidInstBytes(ins).forEach(function(b){ out.push(b & 0xFF); });
     _sidInstExtBytes(ins).forEach(function(b){ out.push(b & 0xFF); });
   });
   _sidPatterns.forEach(function(pat){
-    for (let v=0;v<3;v++) for (let r=0;r<_SID_ROWS;r++) {
+    for (let v=0;v<voices;v++) for (let r=0;r<_SID_ROWS;r++) {
       const c = pat[v][r];
       out.push(c.note==null?0:(c.note+1)&0xFF);
       out.push(c.inst&0xFF);
@@ -4990,7 +5310,8 @@ function _sidSerialize() {
 function _sidDeserialize(src) {
   _sidStop();
   let p = 0;
-  const extended = src[0] === 0xFD; // see the format comment above _sidSerialize
+  const extended = src[0] === 0xFD || src[0] === 0xFC; // see the format comment above _sidSerialize
+  const voices = src[0] === 0xFC ? 6 : 3;
   const versioned = extended || src[0] === 0xFE;
   if (versioned) p = 1;
   const ni = src[p++] || 0, np = src[p++] || 0;
@@ -4999,6 +5320,7 @@ function _sidDeserialize(src) {
     const speedEl = document.getElementById("sid-speed");
     if (speedEl) speedEl.value = String(_sidSpeed);
   }
+  _sidSid2Addr = voices > 3 ? 0xD000 + ((src[p++] || 0x42) << 4) : 0xD420;
   _sidInsts = [];
   for (let i=0;i<ni;i++) {
     const ctrl=src[p++], ad=src[p++], sr=src[p++], pwlo=src[p++], pwhi=src[p++], cutlo=src[p++], cuthi=src[p++], resfilt=src[p++], mv=src[p++];
@@ -5016,8 +5338,8 @@ function _sidDeserialize(src) {
   if (!_sidInsts.length) _sidInsts = [_sidNewInst()];
   _sidPatterns = [];
   for (let pi=0; pi<np; pi++) {
-    const pat = _sidNewPattern();
-    for (let v=0;v<3;v++) for (let r=0;r<_SID_ROWS;r++){
+    const pat = _sidNewPattern(voices);
+    for (let v=0;v<voices;v++) for (let r=0;r<_SID_ROWS;r++){
       const note=src[p++], inst=src[p++];
       let fx = null, fxval = 0;
       if (versioned) { fx = _SID_FX_NAMES[src[p++] || 0] || null; fxval = src[p++] || 0; }
@@ -5025,7 +5347,7 @@ function _sidDeserialize(src) {
     }
     _sidPatterns.push(pat);
   }
-  if (!_sidPatterns.length) _sidPatterns = [_sidNewPattern()];
+  if (!_sidPatterns.length) _sidPatterns = [_sidNewPattern(voices)];
   if (p < src.length) {
     const songLen = src[p++] || 0;
     _sidSong = [];
@@ -5339,7 +5661,9 @@ function _sidApplyGoatImport(bytes) {
    a legato pitch change; rows of L / L+1 frames start on the note ons (F effects
    carry the changes); pitch = the most common semitone of the main waveform.
    Instruments come from ADSR, the waveform / pitch steps of the whole note
-   (→ wave table), pulse and filter movement and the gate timing. */
+   (→ wave table), pulse and filter movement and the gate timing. A frame holds
+   26 bytes per SID (the registers + the gate edges): a tune with two SIDs becomes
+   six voices, and its second SID's address comes along as `sid2`. */
 const _SID_DUMP_MAX_INSTS = 128;
 
 const _SID_DUMP_TABLE_STEPS = 32;
@@ -5364,12 +5688,12 @@ function _sidDumpImport(regs, meta) {
   const skip = function(key) { skipped[key] = (skipped[key] || 0) + 1; };
 
   // ── note ons per voice ──
-  const voices = [0, 1, 2].map(function(v) {
-    const ons = [];
+  const voices = Array.from({ length: Math.round(FB / 26) * 3 }, function(_, v) {
+    const at = 26 * (v / 3 | 0), bit = v % 3, ons = [];
     for (let f = 0; f < frames; f++) {
-      if ((R(f, 25) >> v) & 1) ons.push(f);
+      if ((R(f, at + 25) >> bit) & 1) ons.push(f);
     }
-    return { b: v * 7, ons: ons };
+    return { at: at, bit: bit, b: at + bit * 7, ons: ons };
   });
   // a gate edge within 2 frames of the previous one on the same voice retriggers the same note
   voices.forEach(function(vc) {
@@ -5460,7 +5784,7 @@ function _sidDumpImport(regs, meta) {
   if (totalRows > MAX_ROWS) { totalRows = MAX_ROWS; skip("length (cut)"); }
   totalRows = Math.ceil(totalRows / _SID_ROWS) * _SID_ROWS;
   const empty = function() { return { note: null, inst: 0, fx: null, fxval: 0 }; };
-  const cols = [0, 1, 2].map(function(){ return Array.from({ length: totalRows }, empty); });
+  const cols = voices.map(function(){ return Array.from({ length: totalRows }, empty); });
 
   // ── notes → cells, instruments by signature ──
   const insts = [], instKeys = {}, recs = [];
@@ -5473,10 +5797,10 @@ function _sidDumpImport(regs, meta) {
   };
   const same = function(a, c) { return a.w === c.w && a.n === c.n && a.abs === c.abs; };
   voices.forEach(function(vc, v) {
-    const b = vc.b;
+    const b = vc.b, at = vc.at;
     const freqAt = function(g) { return R(g, b) | (R(g, b + 1) << 8); };
     const pwAt = function(g) { return R(g, b + 2) | ((R(g, b + 3) & 15) << 8); };
-    const cutAt = function(g) { return (R(g, 0x15) & 7) | (R(g, 0x16) << 3); };
+    const cutAt = function(g) { return (R(g, at + 0x15) & 7) | (R(g, at + 0x16) << 3); };
     vc.ons.forEach(function(f, k) {
       const next = k + 1 < vc.ons.length ? vc.ons[k + 1] : frames;
       // the whole note up to the next one: after the gate off the release still sounds
@@ -5582,13 +5906,13 @@ function _sidDumpImport(regs, meta) {
       }
       if (dn && hi > lo) { ins.pwmSpeed = Math.min(255, Math.max(1, Math.round(dsum / dn))); ins.pwmMin = lo; ins.pwmMax = hi; }
       // filter: global registers, routed per voice
-      const mv = R(f, 0x18);
+      const mv = R(f, at + 0x18);
       ins.vol = mv & 15;
       ins.off3 = !!(mv & 0x80);
-      ins.filt = !!((R(f, 0x17) >> v) & 1);
+      ins.filt = !!((R(f, at + 0x17) >> vc.bit) & 1);
       if (ins.filt) {
         ins.lp = !!(mv & 0x10); ins.bp = !!(mv & 0x20); ins.hp = !!(mv & 0x40);
-        ins.res = R(f, 0x17) >> 4;
+        ins.res = R(f, at + 0x17) >> 4;
         ins.cut = cutAt(f);
         ins.cutEnd = cutAt(end - 1);
         let cs = 0, cn = 0, up = false, down = false;
@@ -5737,9 +6061,9 @@ function _sidDumpImport(regs, meta) {
     const val = Math.min(255, rowLen(r + 1));
     if (val === Math.min(255, rowLen(r))) continue;
     // timing wins over a note cut: a missed speed change would shift the rest of the song
-    let v = [0, 1, 2].find(function(k){ return !cols[k][r].fx; });
-    if (v === undefined) v = [0, 1, 2].find(function(k){ return cols[k][r].fx === "C"; });
-    if (v === undefined) { skip("speed changes"); continue; }
+    let v = cols.findIndex(function(col){ return !col[r].fx; });
+    if (v < 0) v = cols.findIndex(function(col){ return col[r].fx === "C"; });
+    if (v < 0) { skip("speed changes"); continue; }
     if (cols[v][r].fx === "C") skip("note cuts dropped");
     cols[v][r].fx = "F"; cols[v][r].fxval = val;
   }
@@ -5753,7 +6077,7 @@ function _sidDumpImport(regs, meta) {
     song.push(keys[key]);
   }
   return { name: meta.name || "", author: meta.author || "", insts: finalInsts, patterns: patterns, song: song,
-    speed: Math.max(1, Math.min(255, rowLen(0))), skipped: skipped };
+    speed: Math.max(1, Math.min(255, rowLen(0))), skipped: skipped, sid2: meta.sid2Addr || 0 };
 }
 
 function _sidSetTuneTitle(title) {
@@ -5772,6 +6096,7 @@ function _sidApplyImportedTune(res, title) {
   _sidPatterns = res.patterns;
   _sidSong = res.song;
   _sidSpeed = res.speed;
+  if (res.sid2) _sidSid2Addr = res.sid2;
   const speedEl = document.getElementById("sid-speed");
   if (speedEl) speedEl.value = String(_sidSpeed);
   if (typeof _sidUpdateBpmDisplay === "function") _sidUpdateBpmDisplay();
@@ -5868,7 +6193,8 @@ async function _sidRunSidImport() {
     _sidApplyImportedTune(res, info ? [info.name, info.author].filter(Boolean).join(" — ") : "");
     const skipped = Object.keys(res.skipped).map(function(k){ return k + " ×" + res.skipped[k]; });
     showViceToast(tf("sidImportSidDone", { insts: res.insts.length, pats: res.patterns.length, song: res.song.length, speed: res.speed }) +
-      (skipped.length ? " " + tf("sidGoatSkipped", { list: skipped.join(", ") }) : ""), false);
+      (skipped.length ? " " + tf("sidGoatSkipped", { list: skipped.join(", ") }) : "") +
+      (dump.sidCount > 2 ? " " + tf("sidImportSidFirstOnly", { count: dump.sidCount }) : ""), false);
   } catch (err) {
     progress(null, String((err && err.message) || err));
     busy(false);
@@ -5893,10 +6219,10 @@ function _sidExport(kind) {
   });
   _sidPatterns.forEach(function(pat, pi) {
     lines.push("REM PATTERN " + pi);
-    for (let v = 0; v < 3; v++) {
+    for (let v = 0; v < pat.length; v++) {
       const notes = [];
       for (let r = 0; r < _SID_ROWS; r++) { const c = pat[v][r]; notes.push(c.note==null ? 0 : (c.note+1)); }
-      lines.push((2000+pi*100+v*30) + " DATA " + dd(notes));
+      lines.push((2000+pi*(pat.length > 3 ? 200 : 100)+v*30) + " DATA " + dd(notes));
     }
   });
   const song = (_sidSong && _sidSong.length) ? _sidSong : [0];
@@ -5906,6 +6232,8 @@ function _sidExport(kind) {
 }
 
 const _SID_PLAYER_CODE_MAX = 0x900;
+
+const _SID_PLAYER_2SID_EXTRA = 0x500;
 
 function _sidExportAsmPlayable() {
   const lines = [];
@@ -5924,7 +6252,10 @@ function _sidExportAsmPlayable() {
   // Each pattern is addressed via a 16-bit pointer (base + patternIndex*32,
   // computed once per pattern by sid_load_pattern), so the pattern count is
   // not bounded by one 8-bit index across the song; 256 is a defensive cap.
-  const exportedPatterns = Math.min(_sidPatterns.length, 256);
+  // Six voices need twice the data, so fewer patterns fit below $A000.
+  const nv = _sidPatterns[0] && _sidPatterns[0].length > 3 ? 6 : 3;
+  const sid2 = nv > 3 ? _sidSid2Addr : 0xD420;
+  const exportedPatterns = Math.min(_sidPatterns.length, nv > 3 ? 46 : 256);
   const td = _sidTuneData({ patterns: _sidPatterns.slice(0, exportedPatterns) });
   const speed = td.speed;
   const exportedSong = td.song.slice(0, 255);
@@ -5932,7 +6263,7 @@ function _sidExportAsmPlayable() {
 
   L("; =========================================================",
     "; SID player + tune (generated by Visual Assembler SID editor)",
-    "; PAL 50 Hz IRQ-driven, 3 voices, " + _SID_ROWS + "-row patterns",
+    "; PAL 50 Hz IRQ-driven, " + (nv > 3 ? "6 voices (second SID at $" + sid2.toString(16).toUpperCase() + ")" : "3 voices") + ", " + _SID_ROWS + "-row patterns",
     "; Call JSR sid_init once to start playback; JSR sid_stop to silence.",
     "; Own IRQ instead: skip sid_init's IRQ setup and JSR sid_frame once per frame.",
     "; Speed: " + speed + " frames/row. " + exportedPatterns + " pattern(s) in the bank, " +
@@ -5950,6 +6281,8 @@ function _sidExportAsmPlayable() {
     ";   $02-$19  twelve pattern-relative pointers (v0/v1/v2 x notes/insts/fx/fxval)",
     ";   $1A SID_TMP2   $1B/$1C SID_OFFSET (pattern-index*32, 16-bit)",
     ";   $2F SID_SPEED_CUR (current frames/row; changed at runtime by the F effect)",
+    ...(nv > 3 ? [";   $50-$67  the same twelve pointers of v3/v4/v5 (second SID)",
+      ";   $68/$69  the current voice's SID registers"] : []),
     "; Everything else (voice, modulation and filter state) lives in sid_state.",
     ";",
     "; Every frame: per voice the wave/arpeggio table, instrument vibrato,",
@@ -5971,9 +6304,12 @@ function _sidExportAsmPlayable() {
 
   const STATE_V = ["on", "inst", "note", "gate", "jon", "ffr", "ctl", "sll", "slh", "fvol", "fvoh", "fvs", "fvc",
     "vdl", "vcn", "vdr", "vofl", "vofh", "vstl", "vsth", "pwl", "pwh", "pwd", "tpos", "tcnt", "wav", "nof", "nab"];
-  const STATE_G = ["fown", "fcl", "fch", "fspd", "ftl", "fth", "fsl", "fsh", "fel", "feh", "fping", "fres", "fmode",
-    "froute", "vol", "cv", "ci", "fxv", "tmp", "t0", "t1", "t3", "m0", "m1"];
-  const stateSize = STATE_V.length * 3 + STATE_G.length;
+  // filter and volume are per SID: the second SID's state has the suffix 2
+  const STATE_F = ["fown", "fcl", "fch", "fspd", "ftl", "fth", "fsl", "fsh", "fel", "feh", "fping", "fres", "fmode",
+    "froute", "vol"];
+  const STATE_G = STATE_F.concat(nv > 3 ? STATE_F.map(function(n){ return n + "2"; }) : [],
+    ["cv", "ci", "fxv", "tmp", "t0", "t1", "t3", "m0", "m1"]);
+  const stateSize = STATE_V.length * nv + STATE_G.length;
 
   // ---- sid_init / sid_stop / sid_irq -------------------------------------
   L("sid_init:",
@@ -5983,15 +6319,17 @@ function _sidExportAsmPlayable() {
     "LDX #$18",
     "sid_clr:",
     "STA $D400,X",
+    ...(nv > 3 ? ["STA $" + sid2.toString(16).toUpperCase() + ",X"] : []),
     "DEX",
     "BPL sid_clr",
-    "LDX #" + hx(stateSize - 1),
+    "LDX #" + hx(stateSize),
     "sid_clr_state:",
-    "STA sid_state,X",
     "DEX",
-    "BPL sid_clr_state",
+    "STA sid_state,X",
+    "BNE sid_clr_state",
     "LDA #$FF",
     "STA sid_fown",            // no voice owns the filter yet
+    ...(nv > 3 ? ["STA sid_fown2"] : []),
     "LDA #" + hx(speed),
     "STA $FB",                 // SID_TICK
     "STA $2F",                 // SID_SPEED_CUR (the F effect can change it later)
@@ -6027,6 +6365,7 @@ function _sidExportAsmPlayable() {
     "STA $D40B",
     "STA $D412",
     "STA $D418",
+    ...(nv > 3 ? [4, 11, 18, 24].map(function(r){ return "STA $" + (sid2 + r).toString(16).toUpperCase(); }) : []),
     "LDA #$81",
     "STA $DC0D",               // restore CIA1 timer A IRQ
     "LDA #$31",
@@ -6059,9 +6398,18 @@ function _sidExportAsmPlayable() {
   const voiceInfo = [
     { n: "v0", i: 0, notesPtr: "$02", instsPtr: "$04", fxPtr: "$0E", fxvalPtr: "$10", sid: 0xD400 },
     { n: "v1", i: 1, notesPtr: "$06", instsPtr: "$08", fxPtr: "$12", fxvalPtr: "$14", sid: 0xD407 },
-    { n: "v2", i: 2, notesPtr: "$0A", instsPtr: "$0C", fxPtr: "$16", fxvalPtr: "$18", sid: 0xD40E }
-  ];
+    { n: "v2", i: 2, notesPtr: "$0A", instsPtr: "$0C", fxPtr: "$16", fxvalPtr: "$18", sid: 0xD40E },
+    { n: "v3", i: 3, notesPtr: "$50", instsPtr: "$52", fxPtr: "$5C", fxvalPtr: "$5E", sid: sid2 },
+    { n: "v4", i: 4, notesPtr: "$54", instsPtr: "$56", fxPtr: "$60", fxvalPtr: "$62", sid: sid2 + 7 },
+    { n: "v5", i: 5, notesPtr: "$58", instsPtr: "$5A", fxPtr: "$64", fxvalPtr: "$66", sid: sid2 + 14 }
+  ].slice(0, nv);
   const h4 = function(n){ return "$" + n.toString(16).toUpperCase().padStart(4, "0"); };
+  // Voice registers: an index from $D400 with one SID. A second SID can be out of
+  // the index's reach, so with two SIDs they go through a pointer set per voice.
+  const vbase = nv > 3 ? "JSR sid_vptr" : "LDY sid_vbase,X";
+  const vreg = function(r) {
+    return nv > 3 ? ["LDY #" + hx(r), "STA ($68),Y"] : ["STA " + h4(0xD400 + r) + ",Y"];
+  };
   L("sid_play_row:");
   voiceInfo.forEach(function(vi) {
     L("LDY $FC",
@@ -6144,9 +6492,10 @@ function _sidExportAsmPlayable() {
     "LDA #$00",
     "STA $1C");
   for (let k = 0; k < 5; k++) L("ASL $1B", "ROL $1C");
-  [["$02", "sid_v0_notes"], ["$04", "sid_v0_insts"], ["$0E", "sid_v0_fx"], ["$10", "sid_v0_fxval"],
-   ["$06", "sid_v1_notes"], ["$08", "sid_v1_insts"], ["$12", "sid_v1_fx"], ["$14", "sid_v1_fxval"],
-   ["$0A", "sid_v2_notes"], ["$0C", "sid_v2_insts"], ["$16", "sid_v2_fx"], ["$18", "sid_v2_fxval"]].forEach(function(entry) {
+  voiceInfo.flatMap(function(vi) {
+    return [[vi.notesPtr, "sid_" + vi.n + "_notes"], [vi.instsPtr, "sid_" + vi.n + "_insts"],
+      [vi.fxPtr, "sid_" + vi.n + "_fx"], [vi.fxvalPtr, "sid_" + vi.n + "_fxval"]];
+  }).forEach(function(entry) {
     const zpHi = "$" + (parseInt(entry[0].slice(1), 16) + 1).toString(16).toUpperCase().padStart(2, "0");
     L("CLC", "LDA #<" + entry[1], "ADC $1B", "STA " + entry[0], "LDA #>" + entry[1], "ADC $1C", "STA " + zpHi);
   });
@@ -6223,11 +6572,11 @@ function _sidExportAsmPlayable() {
     "STA sid_tmp",             // note 0..95
     "STX sid_ci",
     "LDX sid_cv",
-    "LDY sid_vbase,X",
+    vbase,
     "LDA sid_ctl,X",
     "AND #$FE",
     "STA sid_ctl,X",
-    "STA $D404,Y",             // gate off: the gate on below retriggers the envelope
+    ...vreg(4),             // gate off: the gate on below retriggers the envelope
     "LDA sid_tmp",
     "STA sid_note,X",
     "LDA sid_ci",
@@ -6313,50 +6662,56 @@ function _sidExportAsmPlayable() {
     "LDA sid_iad,Y",
     "STA sid_t0",
     "LDA sid_isr,Y",
-    "LDY sid_vbase,X",
-    "STA $D406,Y",
+    vbase,
+    ...vreg(6),
     "LDA sid_t0",
-    "STA $D405,Y",
-    "LDY sid_ci",
-    "LDA sid_ivol,Y",
-    "STA sid_vol",
-    "LDA sid_ifl,Y",
-    "AND #$01",
-    "BEQ sid_sv_nofilt",
-    // this voice takes over the filter: cutoff sweep, resonance, mode
-    "STX sid_fown",
-    "LDA sid_icul,Y",
-    "STA sid_fcl",
-    "STA sid_fsl",
-    "LDA sid_icuh,Y",
-    "STA sid_fch",
-    "STA sid_fsh",
-    "LDA sid_icel,Y",
-    "STA sid_fel",
-    "STA sid_ftl",
-    "LDA sid_iceh,Y",
-    "STA sid_feh",
-    "STA sid_fth",
-    "LDA sid_icsp,Y",
-    "STA sid_fspd",
-    "LDA sid_ifl,Y",
-    "AND #$02",
-    "STA sid_fping",
-    "LDA sid_ires,Y",
-    "STA sid_fres",
-    "LDA sid_imode,Y",
-    "STA sid_fmode",
-    "LDA sid_vbit,X",
-    "ORA sid_froute",
-    "STA sid_froute",
-    "RTS",
-    "sid_sv_nofilt:",
-    "LDA sid_vbit,X",
-    "EOR #$FF",
-    "AND sid_froute",
-    "STA sid_froute",
-    "RTS",
-    "",
+    ...vreg(5),
+    "LDY sid_ci");
+  const takeFilter = function(s) {
+    L(
+      "LDA sid_ivol,Y",
+      "STA sid_vol" + s,
+      "LDA sid_ifl,Y",
+      "AND #$01",
+      "BEQ sid_sv_nofilt" + s,
+      // this voice takes over the filter: cutoff sweep, resonance, mode
+      "STX sid_fown" + s,
+      "LDA sid_icul,Y",
+      "STA sid_fcl" + s,
+      "STA sid_fsl" + s,
+      "LDA sid_icuh,Y",
+      "STA sid_fch" + s,
+      "STA sid_fsh" + s,
+      "LDA sid_icel,Y",
+      "STA sid_fel" + s,
+      "STA sid_ftl" + s,
+      "LDA sid_iceh,Y",
+      "STA sid_feh" + s,
+      "STA sid_fth" + s,
+      "LDA sid_icsp,Y",
+      "STA sid_fspd" + s,
+      "LDA sid_ifl,Y",
+      "AND #$02",
+      "STA sid_fping" + s,
+      "LDA sid_ires,Y",
+      "STA sid_fres" + s,
+      "LDA sid_imode,Y",
+      "STA sid_fmode" + s,
+      "LDA sid_vbit,X",
+      "ORA sid_froute" + s,
+      "STA sid_froute" + s,
+      "RTS",
+      "sid_sv_nofilt" + s + ":",
+      "LDA sid_vbit,X",
+      "EOR #$FF",
+      "AND sid_froute" + s,
+      "STA sid_froute" + s,
+      "RTS");
+  };
+  if (nv > 3) L("CPX #$03", "BCC sid_sv_sid1", "JMP sid_sv_sid2", "sid_sv_sid1:");
+  takeFilter("");
+  if (nv > 3) { L("sid_sv_sid2:"); takeFilter("2"); }
+  L("",
     "; A = table step, X = voice: waveform (0 = keep) and note offset",
     "sid_tab_apply:",
     "TAY",
@@ -6450,8 +6805,8 @@ function _sidExportAsmPlayable() {
     "ORA sid_gate,X",
     "sid_up_wctl:",
     "STA sid_ctl,X",
-    "LDY sid_vbase,X",
-    "STA $D404,Y",
+    vbase,
+    ...vreg(4),
     // note index: absolute table note, or note + signed offset, clamped 0..95
     "LDA sid_nab,X",
     "BEQ sid_up_rel",
@@ -6495,10 +6850,10 @@ function _sidExportAsmPlayable() {
     "STA sid_t0",
     "LDA sid_t1",
     "ADC sid_vofh,X",
-    "LDY sid_vbase,X",
-    "STA $D401,Y",
+    vbase,
+    ...vreg(1),
     "LDA sid_t0",
-    "STA $D400,Y",
+    ...vreg(0),
     // instrument vibrato: after the delay a triangle LFO, flipping every speed frames
     "LDY sid_ci",
     "LDA sid_ivsp,Y",
@@ -6538,11 +6893,11 @@ function _sidExportAsmPlayable() {
     "STA sid_vdr,X",
     "sid_up_novib:",
     // pulse width out, then the PWM sweep bouncing between min and max
-    "LDY sid_vbase,X",
+    vbase,
     "LDA sid_pwl,X",
-    "STA $D402,Y",
+    ...vreg(2),
     "LDA sid_pwh,X",
-    "STA $D403,Y",
+    ...vreg(3),
     "LDY sid_ci",
     "LDA sid_ipms,Y",
     "BEQ sid_up_next",
@@ -6595,106 +6950,130 @@ function _sidExportAsmPlayable() {
     "STA sid_pwd,X",
     "sid_up_next:",
     "INX",
-    "CPX #$03",
+    "CPX #" + hx(nv),
     "BCS sid_up_filter",
-    "JMP sid_up_loop",
-    // filter registers, then the cutoff sweep (bounce with ping-pong)
-    "sid_up_filter:",
-    "LDA sid_fcl",
-    "AND #$07",
-    "STA $D415",
-    "LDA sid_fch",
-    "STA sid_t1",
-    "LDA sid_fcl",
-    "LSR sid_t1",
-    "ROR",
-    "LSR sid_t1",
-    "ROR",
-    "LSR sid_t1",
-    "ROR",
-    "STA $D416",
-    "LDA sid_fres",
-    "ORA sid_froute",
-    "STA $D417",
-    "LDA sid_fmode",
-    "ORA sid_vol",
-    "STA $D418",
-    "LDA sid_fown",
-    "BMI sid_fl_ret",
-    "LDA sid_fspd",
-    "BNE sid_fl_go",
-    "sid_fl_ret:",
-    "RTS",
-    "sid_fl_go:",
-    "BMI sid_fl_neg",
-    "CLC",
-    "ADC sid_fcl",
-    "STA sid_fcl",
-    "LDA sid_fch",
-    "ADC #$00",
-    "STA sid_fch",
-    "CMP sid_fth",
-    "BCC sid_fl_ret",
-    "BNE sid_fl_reach",
-    "LDA sid_fcl",
-    "CMP sid_ftl",
-    "BCC sid_fl_ret",
-    "JMP sid_fl_reach",
-    "sid_fl_neg:",
-    "CLC",
-    "ADC sid_fcl",
-    "STA sid_fcl",
-    "LDA sid_fch",
-    "ADC #$FF",
-    "STA sid_fch",
-    "BMI sid_fl_reach",
-    "CMP sid_fth",
-    "BCC sid_fl_reach",
-    "BNE sid_fl_ret",
-    "LDA sid_fcl",
-    "CMP sid_ftl",
-    "BEQ sid_fl_reach",
-    "BCS sid_fl_ret",
-    "sid_fl_reach:",
-    "LDA sid_ftl",
-    "STA sid_fcl",
-    "LDA sid_fth",
-    "STA sid_fch",
-    "LDA sid_fping",
-    "BNE sid_fl_bounce",
-    "LDA #$00",
-    "STA sid_fspd",
-    "RTS",
-    "sid_fl_bounce:",
-    "LDA sid_ftl",
-    "CMP sid_fel",
-    "BNE sid_fl_toend",
-    "LDA sid_fth",
-    "CMP sid_feh",
-    "BNE sid_fl_toend",
-    "LDA sid_fsl",
-    "STA sid_ftl",
-    "LDA sid_fsh",
-    "STA sid_fth",
-    "JMP sid_fl_flip",
-    "sid_fl_toend:",
-    "LDA sid_fel",
-    "STA sid_ftl",
-    "LDA sid_feh",
-    "STA sid_fth",
-    "sid_fl_flip:",
-    "LDA #$00",
-    "SEC",
-    "SBC sid_fspd",
-    "STA sid_fspd",
-    "sid_fl_done:",
-    "RTS",
-    "");
+    "JMP sid_up_loop");
+  L("sid_up_filter:");
+  if (nv > 3) L("JSR sid_filter2");
+  // filter registers, then the cutoff sweep (bounce with ping-pong)
+  const filterUpdate = function(s, o) {
+    L(
+      "LDA sid_fcl" + s,
+      "AND #$07",
+      "STA " + h4(0xD415 + o),
+      "LDA sid_fch" + s,
+      "STA sid_t1",
+      "LDA sid_fcl" + s,
+      "LSR sid_t1",
+      "ROR",
+      "LSR sid_t1",
+      "ROR",
+      "LSR sid_t1",
+      "ROR",
+      "STA " + h4(0xD416 + o),
+      "LDA sid_fres" + s,
+      "ORA sid_froute" + s,
+      "STA " + h4(0xD417 + o),
+      "LDA sid_fmode" + s,
+      "ORA sid_vol" + s,
+      "STA " + h4(0xD418 + o),
+      "LDA sid_fown" + s,
+      "BMI sid_fl_ret" + s,
+      "LDA sid_fspd" + s,
+      "BNE sid_fl_go" + s,
+      "sid_fl_ret" + s + ":",
+      "RTS",
+      "sid_fl_go" + s + ":",
+      "BMI sid_fl_neg" + s,
+      "CLC",
+      "ADC sid_fcl" + s,
+      "STA sid_fcl" + s,
+      "LDA sid_fch" + s,
+      "ADC #$00",
+      "STA sid_fch" + s,
+      "CMP sid_fth" + s,
+      "BCC sid_fl_ret" + s,
+      "BNE sid_fl_reach" + s,
+      "LDA sid_fcl" + s,
+      "CMP sid_ftl" + s,
+      "BCC sid_fl_ret" + s,
+      "JMP sid_fl_reach" + s,
+      "sid_fl_neg" + s + ":",
+      "CLC",
+      "ADC sid_fcl" + s,
+      "STA sid_fcl" + s,
+      "LDA sid_fch" + s,
+      "ADC #$FF",
+      "STA sid_fch" + s,
+      "BMI sid_fl_reach" + s,
+      "CMP sid_fth" + s,
+      "BCC sid_fl_reach" + s,
+      "BNE sid_fl_ret" + s,
+      "LDA sid_fcl" + s,
+      "CMP sid_ftl" + s,
+      "BEQ sid_fl_reach" + s,
+      "BCS sid_fl_ret" + s,
+      "sid_fl_reach" + s + ":",
+      "LDA sid_ftl" + s,
+      "STA sid_fcl" + s,
+      "LDA sid_fth" + s,
+      "STA sid_fch" + s,
+      "LDA sid_fping" + s,
+      "BNE sid_fl_bounce" + s,
+      "LDA #$00",
+      "STA sid_fspd" + s,
+      "RTS",
+      "sid_fl_bounce" + s + ":",
+      "LDA sid_ftl" + s,
+      "CMP sid_fel" + s,
+      "BNE sid_fl_toend" + s,
+      "LDA sid_fth" + s,
+      "CMP sid_feh" + s,
+      "BNE sid_fl_toend" + s,
+      "LDA sid_fsl" + s,
+      "STA sid_ftl" + s,
+      "LDA sid_fsh" + s,
+      "STA sid_fth" + s,
+      "JMP sid_fl_flip" + s,
+      "sid_fl_toend" + s + ":",
+      "LDA sid_fel" + s,
+      "STA sid_ftl" + s,
+      "LDA sid_feh" + s,
+      "STA sid_fth" + s,
+      "sid_fl_flip" + s + ":",
+      "LDA #$00",
+      "SEC",
+      "SBC sid_fspd" + s,
+      "STA sid_fspd" + s,
+      "sid_fl_done" + s + ":",
+      "RTS");
+  };
+  filterUpdate("", 0);
+  if (nv > 3) {
+    L("sid_filter2:");
+    filterUpdate("2", sid2 - 0xD400);
+    L("; X = voice: $68/$69 = its SID registers (A is kept)",
+      "sid_vptr:",
+      "PHA",
+      "LDA sid_vbase,X",
+      "STA $68",
+      "LDA sid_vbaseh,X",
+      "STA $69",
+      "PLA",
+      "RTS");
+  }
+  L("");
 
   // ---- data ----------------------------------------------------------------
   const dataStart = lines.length;
-  chunk("sid_vbase", [0, 7, 14]);
-  chunk("sid_vbit", [1, 2, 4]);
+  if (nv > 3) {
+    const bases = voiceInfo.map(function(vi){ return vi.sid; });
+    chunk("sid_vbase", bases.map(function(x){ return x & 0xFF; }));
+    chunk("sid_vbaseh", bases.map(function(x){ return x >> 8; }));
+  } else {
+    chunk("sid_vbase", [0, 7, 14]);
+  }
+  chunk("sid_vbit", [1, 2, 4, 1, 2, 4].slice(0, nv));
   L("; Song/order list: which pattern plays at each step; a pattern may",
     "; appear more than once.");
   chunk("sid_order", exportedSong);
@@ -6720,7 +7099,7 @@ function _sidExportAsmPlayable() {
   L("");
 
   // notes + instrument + effect columns per voice, all patterns concatenated
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < nv; v++) {
     const notes = [], insts = [], fxs = [], fxvals = [];
     for (let pi = 0; pi < exportedPatterns; pi++) {
       for (let r = 0; r < _SID_ROWS; r++) {
@@ -6749,11 +7128,12 @@ function _sidExportAsmPlayable() {
     const m = /^\s*\.byte\s+(.*)$/.exec(l);
     return m ? n + m[1].split(",").length : n;
   }, 0);
-  const split = 0xC000 + _SID_PLAYER_CODE_MAX + dataBytes + stateSize > 0xD000;
+  const codeMax = nv > 3 ? _SID_PLAYER_CODE_MAX + _SID_PLAYER_2SID_EXTRA : _SID_PLAYER_CODE_MAX;
+  const split = 0xC000 + codeMax + dataBytes + stateSize > 0xD000;
   _sidExportAsmPlayable.dataOrg = split ? (0xA000 - dataBytes) & 0xFF00 : 0xC000;
   if (split) lines.length = dataStart;
   L("", "; Player state (cleared by sid_init)", "sid_state:");
-  STATE_V.forEach(function(n){ L("sid_" + n + ":", ".byte $00, $00, $00"); });
+  STATE_V.forEach(function(n){ L("sid_" + n + ":", ".byte " + new Array(nv).fill("$00").join(", ")); });
   STATE_G.forEach(function(n){ L("sid_" + n + ":", ".byte $00"); });
   if (split) {
     L("", "; Tune data (" + dataBytes + " bytes): too long for $C000-$CFFF next to the player",
@@ -6780,6 +7160,7 @@ function _sidExportUbBlock() {
   if (exportedPatterns < _sidPatterns.length) {
     lines.push("# NOTE: only the first " + exportedPatterns + " patterns are exported (" + _sidPatterns.length + " present).");
   }
+  if (_sidPatterns[0] && _sidPatterns[0].length > 3) lines.push("# NOTE: UltimateBasic plays one SID: only the first three voices are exported.");
   lines.push("tune");
   lines.push("  speed " + speed);
   _sidInsts.forEach(function(raw, i) {
@@ -6907,6 +7288,7 @@ function setupSidEditor() {
     // place the detached tracker before the first paint (no jump from the default spot)
     _sidRestoreTrackerFloat();
     _sidRollRestore();
+    _sidAnaRestore();
     if (_sidVkbdState().open) _sidOpenVirtualKeyboard(false);
     _sidStreamPreload();
     syncEditorButton();
@@ -7002,6 +7384,20 @@ function setupSidEditor() {
 
   // tracker
   onId("sid-pat-sel", "change", function(e){ _sidSetPattern(parseInt(e.target.value,10), true); });
+  onId("sid-chip-count", "change", function(e){ _sidSetSidCount(Number(e.target.value) === 2 ? 2 : 1); });
+  const sid2Addr = document.getElementById("sid-chip-addr");
+  if (sid2Addr) {
+    _sidSid2Addrs().forEach(function(a) {
+      const o = document.createElement("option");
+      o.value = String(a); o.textContent = "$" + a.toString(16).toUpperCase();
+      sid2Addr.appendChild(o);
+    });
+    sid2Addr.value = String(_sidSid2Addr);
+    sid2Addr.addEventListener("change", function(e) {
+      _sidStop();
+      _sidSid2Addr = Number(e.target.value);
+    });
+  }
   onId("sid-pat-add", "click", function(){ _sidPatterns.push(_sidNewPattern()); _sidBuildPatSel(); _sidSetPattern(_sidPatterns.length-1, true); });
   onId("sid-song-add", "click", _sidSongInsert);
   onId("sid-song-del", "click", _sidSongRemove);
@@ -7097,6 +7493,7 @@ function setupSidEditor() {
   }
   onId("sid-tracker-detach", "click", function(){ _sidSetTrackerDetached(!_sidTrackerIsDetached()); });
   _sidSetupRoll();
+  _sidSetupAna();
   onId("sid-inst-sel", "change", _sidRollSyncHeader);
   onId("sid-tracker-attach", "click", function(){ _sidSetTrackerDetached(false); });
   _sidSetupTrackerFloat();
@@ -7118,7 +7515,7 @@ function setupSidEditor() {
     const from = Math.min(0xC000, _sidExportAsmPlayable.dataOrg || 0xC000);
     if (load < from && prg.length > 2 + from - load) prg = Uint8Array.from([from & 0xFF, from >> 8, ...prg.slice(2 + from - load)]);
     // a lejátszó a sid_init-ben saját IRQ-t telepít ($C000), ezért playAddress = 0
-    _saveBinFile(_buildPsidBytes(prg, 0xC000, 0x0000, "VA SID tune", String(new Date().getFullYear())), "tune.sid");
+    _saveBinFile(_buildPsidBytes(prg, 0xC000, 0x0000, "VA SID tune", String(new Date().getFullYear()), _sidVoiceCount() > 3 ? _sidSid2Addr : 0), "tune.sid");
   });
   const sidBinFile = document.getElementById("sid-bin-file");
   onId("sid-load-bin", "click", function(){ if (sidBinFile) sidBinFile.click(); });
@@ -7136,7 +7533,6 @@ function setupSidEditor() {
     _sidApplyImportedTune({ insts: [_sidNewInst()], patterns: [_sidNewPattern()], song: [0], speed: 6 }, "");
   };
   onId("sid-new-tune", "click", sidNewTune);
-  onId("sid-new-tune-btn", "click", sidNewTune);
   onId("sid-import-sid", "click", function(){ if (sidSidFile) sidSidFile.click(); });
   if (sidSidFile) sidSidFile.addEventListener("change", function(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
@@ -7168,8 +7564,8 @@ function setupSidEditor() {
       if (e.shiftKey) { if (_sidSelAnchor === null) _sidSelAnchor = { voice: _sidSel.voice, row: _sidSel.row }; } else { _sidSelAnchor = null; }
       _sidSel.row = (_sidSel.row-1+_SID_ROWS)%_SID_ROWS; _sidRefreshSel(); e.preventDefault(); return;
     }
-    if (e.key === "ArrowLeft") { _sidSelAnchor = null; _sidSel.voice = (_sidSel.voice+2)%3; _sidRefreshSel(); e.preventDefault(); return; }
-    if (e.key === "ArrowRight") { _sidSelAnchor = null; _sidSel.voice = (_sidSel.voice+1)%3; _sidRefreshSel(); e.preventDefault(); return; }
+    if (e.key === "ArrowLeft") { _sidSelAnchor = null; const n = _sidVoiceCount(); _sidSel.voice = (_sidSel.voice+n-1)%n; _sidRefreshSel(); e.preventDefault(); return; }
+    if (e.key === "ArrowRight") { _sidSelAnchor = null; _sidSel.voice = (_sidSel.voice+1)%_sidVoiceCount(); _sidRefreshSel(); e.preventDefault(); return; }
     if (e.key === "Delete" || e.key === "Backspace" || k === ".") {
       _sidSelAnchor = null;
       _sidCurPat()[_sidSel.voice][_sidSel.row] = { note:null, inst:0 };
@@ -7416,7 +7812,6 @@ function _sidApplyTranslations() {
   setText("#sid-save-bin", t("sidSaveBin"));
   setText("#sid-import-goat", t("sidImportGoat"));
   setText("#sid-new-tune", t("sidNewTune"));
-  setText("#sid-new-tune-btn", t("sidNewTune"));
   setText("#sid-import-sid", t("sidImportSid"));
   setText("#sid-master-vol-lbl", t("sidMasterVolume"));
   setText("#sid-vkbd-inst-lbl", t("sidVkbdInstrumentLabel"));
@@ -7522,7 +7917,7 @@ function _sidApplyTranslations() {
   setText(".sid-tracker-row .sid-lbl", t("sidTrackerLabel"));
   setAttr("#sid-pat-add", t("sidAddPattern"));
   setAttr("#sid-pat-del", t("sidDeletePattern"));
-  const sidTrackerMiniLbls = document.querySelectorAll(".sid-tracker-row .sid-mini-lbl");
+  const sidTrackerMiniLbls = document.querySelectorAll(".sid-tracker-row .sid-mini-lbl:not(#sid-chip-lbl)");
   if (sidTrackerMiniLbls[0]) sidTrackerMiniLbls[0].textContent = t("sidPlayMode");
   if (sidTrackerMiniLbls[1]) sidTrackerMiniLbls[1].textContent = t("sidSpeed");
   const sidOctLbl = [...sidTrackerMiniLbls].find(function(el){ return el.nextElementSibling?.id === "sid-oct-down"; });
@@ -7542,6 +7937,8 @@ function _sidApplyTranslations() {
   _sidUpdatePauseButton();
   setAttr("#sid-stop", t("sidStop"));
   setAttr("#sid-vkbd-stop", t("sidStop"));
+  setAttr("#sid-chip-count", t("sidChipCount"));
+  setAttr("#sid-chip-addr", t("sidChipAddr"));
   setAttr("#sid-voice-copy", t("sidVoiceCopy"));
   setAttr("#sid-voice-paste", t("sidVoicePaste"));
   setAttr("#sid-clear", t("sidClearSelection"));
@@ -7555,6 +7952,8 @@ function _sidApplyTranslations() {
   setText("#sid-vkbd-octaves-label", t("sidVkbdOctaves"));
   _sidSyncDetachBtn();
   setAttr("#sid-roll-btn", t("sidRollTitle"));
+  setAttr("#sid-ana-btn", t("sidAnaTitle"));
+  setText("#sid-ana-title", t("sidAnaTitle"));
   setText("#sid-roll-title", t("sidRollTitle"));
   setText("#sid-roll-help", t("sidRollHelp"));
   setAttr("#sid-roll-stop", t("sidStop"));
@@ -7637,7 +8036,6 @@ function _sidApplyTranslations() {
   setText("#about-license-label", t("aboutLicenseLabel"));
   setText("#about-website-label", t("aboutWebsiteLabel"));
   setText("#about-sid-credit-label", t("aboutSidCreditLabel"));
-  setText("#about-core-credit-label", t("aboutCoreCreditLabel"));
   setText("#about-repo-label", t("aboutRepoLabel"));
   setText("#about-vma-repo-label", t("aboutVmaRepoLabel"));
   setText("#about-vma-version-label", t("aboutVmaVersionLabel"));
