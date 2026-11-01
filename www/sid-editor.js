@@ -4663,7 +4663,7 @@ function _sidLcdShow(pos, pat, row, frames, playing) {
   document.getElementById("sid-lcd")?.classList.toggle("sid-lcd--playing", !!playing);
 }
 
-// runs from setupHardwareSettingsDialog at startup too: no module-level const here (TDZ)
+// runs from _setupAppSettings at startup too: no module-level const here (TDZ)
 function _sidLcdApplyColor() {
   let color = "green";
   try { if (localStorage.getItem("c64va-sid-lcd-color") === "red") color = "red"; } catch (_) {}
@@ -8151,6 +8151,8 @@ function _setupAppSettings() {
     localStorage.setItem("c64va-sid-lcd-color", e.target.value === "red" ? "red" : "green");
     _sidLcdApplyColor();
   });
+  // the SID Player and these controls need the saved values before the SID Editor first opens
+  _sidLoadPreviewSettings();
 }
 
 function _setupAbout() {
