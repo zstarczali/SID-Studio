@@ -22,6 +22,11 @@
 
 - Tracker keys: the upper row played a semitone too high from `R` on, and F could not be entered from it.
 
+### Window
+
+- The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.
+- VA-VK: the active window's header was unreadable on the light themes.
+
 ### Manual
 
 - New user manual in English: `VA SID Studio Manual.md`, printed to `docs/VA SID Studio Manual.pdf`. The installers carry the PDF, and the new Manual toolbar button opens it.

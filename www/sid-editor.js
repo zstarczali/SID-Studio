@@ -7754,6 +7754,15 @@ function _setupAppSettings() {
   _sidLoadPreviewSettings();
 }
 
+// The web view's own menu (Refresh, Save as, More tools) stays only where it is
+// useful: copy and paste in the fields that take text.
+function _setupAppContextMenu() {
+  const textField = "textarea, input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color])";
+  document.addEventListener("contextmenu", function(e) {
+    if (!e.target.closest?.(textField)) e.preventDefault();
+  });
+}
+
 function _setupAbout() {
   const dialog = document.getElementById("about-dialog");
   const closeBtn = document.getElementById("about-close");
@@ -7787,6 +7796,7 @@ setupDraggableEditorDialogs();
 setupDialogStacking();
 _setupAppSettings();
 _setupAbout();
+_setupAppContextMenu();
 _setupThemePicker();
 _setupSplash();
 _sidApplyTranslations();
