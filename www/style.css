@@ -1000,6 +1000,9 @@ button:focus-visible {
 #sid-inst-sel { width: 170px; flex: 0 0 170px; }
 #sid-pat-sel { width: 92px; flex: 0 0 92px; }
 #sid-play-mode { width: 92px; flex: 0 0 92px; }
+#sid-chip-count { width: 52px; flex: 0 0 52px; min-width: 0; padding-right: 20px; }
+#sid-chip-addr { width: 82px; flex: 0 0 82px; min-width: 0; padding-right: 20px; }
+#sid-chip-addr[hidden] { display: none; }
 #sid-inst-name { width: 180px; flex: 0 0 auto; }
 .sid-wave-row .sid-mini-lbl { margin-left: 20px; }
 .sid-input.sid-speed { width: 40px; padding: 0 4px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
@@ -1191,6 +1194,8 @@ button:focus-visible {
 .sid-tracker tr.sid-playing td { background: rgba(120,160,255,0.18); }
 .sid-tracker td.sid-cell { cursor: pointer; width: 84px; min-width: 84px; max-width: 84px; height: 18px; line-height: 1; }
 .sid-tracker .sid-cell-edit { user-select: text; -webkit-user-select: text; }
+.sid-tracker .sid-col-sid2 { border-left: 1px solid #3a4a6a; }
+.sid-roll-vbtn[hidden] { display: none; }
 .sid-tracker td.sid-cell--sel { background: var(--primary) !important; color: #fff; }
 .sid-tracker td.sid-cell--sel-range { background: color-mix(in srgb, var(--primary) 35%, transparent) !important; }
 .sid-tracker-dock,
@@ -1698,23 +1703,30 @@ button:focus-visible {
 dialog { -webkit-user-select: none; user-select: none; }
 dialog img, dialog a { -webkit-user-drag: none; user-drag: none; }
 .sid-roll { width: 900px; height: 400px; min-width: 520px; min-height: 240px; z-index: 31; }
+.sid-ana { width: 720px; height: 240px; min-width: 420px; min-height: 160px; z-index: 32; }
+.sid-ana .sid-trk-float-hdr { justify-content: space-between; }
+.sid-ana-canvas { display: block; flex: 1; min-height: 0; width: 100%; background: #000; }
 .sid-roll-hdr { gap: 10px; }
 .sid-roll-voices { display: inline-flex; gap: 2px; padding: 2px; background: var(--control-bg); border: 1px solid var(--panel-border); border-radius: 2px; }
 .sid-roll-vbtn { height: 22px; min-height: 0; padding: 0 8px; border: none; border-radius: 2px; background: transparent; color: var(--secondary); font: 700 0.7rem "IBM Plex Mono", monospace; cursor: pointer; }
 .sid-roll-vbtn[data-voice="0"].active { background: #38d6ff; color: #0b1020; }
 .sid-roll-vbtn[data-voice="1"].active { background: #ff5ccf; color: #0b1020; }
 .sid-roll-vbtn[data-voice="2"].active { background: #4ade80; color: #0b1020; }
+.sid-roll-vbtn[data-voice="3"].active { background: #ffb020; color: #0b1020; }
+.sid-roll-vbtn[data-voice="4"].active { background: #a78bfa; color: #0b1020; }
+.sid-roll-vbtn[data-voice="5"].active { background: #f87171; color: #0b1020; }
 .sid-roll-tools { display: inline-flex; align-items: center; gap: 2px; }
 .sid-roll-tools .ce-tool-btn { width: 26px; height: 24px; }
 .sid-roll-tools .sid-vkbd-beat { margin: 0 4px; }
 .sid-roll-inst { font: 0.72rem "IBM Plex Mono", monospace; color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sid-roll-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; }
 .sid-roll-canvas { flex: 1 1 auto; min-height: 0; width: 100%; display: block; border: 1px solid var(--panel-border); border-radius: 3px; background: #0b1020; cursor: crosshair; touch-action: none; }
-.sid-roll-foot { display: flex; align-items: flex-start; gap: 12px; }
-.sid-roll-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 12px; font: 0.72rem "IBM Plex Mono", monospace; color: var(--secondary); }
-.sid-roll-chip { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.sid-roll-foot { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.sid-roll-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 3px 12px; max-height: 76px; overflow-y: auto; color-scheme: dark; font: 0.72rem "IBM Plex Mono", monospace; color: var(--secondary); }
+.sid-roll-chip { display: flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; }
+.sid-roll-chip > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .sid-roll-swatch { width: 11px; height: 11px; border-radius: 2px; flex: 0 0 11px; }
-.sid-roll-help { font-size: 0.68rem; color: var(--muted); text-align: right; max-width: 55%; }
+.sid-roll-help { font-size: 0.68rem; color: var(--muted); }
 html[data-theme="starlight"] body {
   background:
     radial-gradient(60% 40% at 10% 108%, rgba(255, 79, 184, 0.30), transparent 70%),

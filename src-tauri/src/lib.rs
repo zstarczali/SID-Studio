@@ -54,13 +54,15 @@ struct SidPreviewPayload {
     frames: Vec<Vec<u8>>,
 }
 
-static SID_PREVIEW_SESSIONS: OnceLock<Mutex<HashMap<String, (sid_core::SidCore, [u8; 3], Instant)>>> = OnceLock::new();
+/// One chip of a preview: its core and each voice's last control register.
+type PreviewChip = (sid_core::SidCore, [u8; 3]);
 
-/// Writes one SID Editor register frame in the player's order: per voice
-/// AD / SR, frequency and pulse width before the control register (a restarted
-/// note first gets its gate cleared), then the filter and volume.
-fn write_preview_frame(sid: &mut sid_core::SidCore, registers: &[u8], last_ctl: &mut [u8; 3]) {
-    let restart = registers.get(0x19).copied().unwrap_or(0);
+static SID_PREVIEW_SESSIONS: OnceLock<Mutex<HashMap<String, (Vec<PreviewChip>, Instant)>>> = OnceLock::new();
+
+/// Writes one chip's 25 registers of a SID Editor frame in the player's order:
+/// per voice AD / SR, frequency and pulse width before the control register (a
+/// restarted note first gets its gate cleared), then the filter and volume.
+fn write_preview_frame(sid: &mut sid_core::SidCore, registers: &[u8], restart: u8, last_ctl: &mut [u8; 3]) {
     for voice in 0..3 {
         let base = voice * 7;
         if restart & (1 << voice) != 0 {
@@ -95,8 +97,14 @@ fn render_sid_preview_blocking(payload: SidPreviewPayload) -> Result<String, Str
     // The SID Editor sends the 25 implemented registers ($D400-$D418), and
     // optionally a 26th byte: bits 0-2 = voices whose note restarted in this
     // frame (the player clears the gate and sets it again within the frame,
-    // which the final register values alone do not show).
-    if payload.frames.iter().any(|frame| frame.len() != 0x19 && frame.len() != 0x1a) {
+    // which the final register values alone do not show). A frame of a tune
+    // with two SIDs has 25 registers each and the restart byte (bits 0-5).
+    let chip_count = if payload.frames[0].len() == 0x33 { 2 } else { 1 };
+    let frame_ok = |frame: &Vec<u8>| match chip_count {
+        2 => frame.len() == 0x33,
+        _ => frame.len() == 0x19 || frame.len() == 0x1a,
+    };
+    if !payload.frames.iter().all(frame_ok) {
         return Err("Invalid SID register frame: expected 25 registers ($D400-$D418).".to_string());
     }
 
@@ -106,16 +114,28 @@ fn render_sid_preview_blocking(payload: SidPreviewPayload) -> Result<String, Str
     } else {
         sid_core::SidModel::Mos8580
     };
-    let render_frames = |sid: &mut sid_core::SidCore, last_ctl: &mut [u8; 3]| {
-        let mut pcm = Vec::<i16>::with_capacity((payload.frames.len() * sample_rate as usize) / 50 + 2);
+    let new_chips = || -> Vec<PreviewChip> {
+        (0..chip_count).map(|_| (sid_core::SidCore::new(sample_rate, model), [0; 3])).collect()
+    };
+    // mono, or interleaved stereo with SID 1 left and SID 2 right
+    let render_frames = |chips: &mut [PreviewChip]| {
+        let mut pcm = Vec::<i16>::with_capacity((payload.frames.len() * sample_rate as usize) / 50 * chip_count + 2);
         let mut rendered = 0usize;
         for (frame_index, registers) in payload.frames.iter().enumerate() {
-            write_preview_frame(sid, registers, last_ctl);
+            let restart = registers.get(0x19 * chip_count).copied().unwrap_or(0);
             let target = ((frame_index + 1) * sample_rate as usize) / 50;
-            let mut chunk = vec![0i16; target.saturating_sub(rendered)];
-            sid.render(&mut chunk);
-            rendered += chunk.len();
-            pcm.extend_from_slice(&chunk);
+            let samples = target.saturating_sub(rendered);
+            let mut chunks = Vec::with_capacity(chips.len());
+            for (index, (sid, last_ctl)) in chips.iter_mut().enumerate() {
+                write_preview_frame(sid, &registers[index * 0x19..(index + 1) * 0x19], restart >> (index * 3), last_ctl);
+                let mut chunk = vec![0i16; samples];
+                sid.render(&mut chunk);
+                chunks.push(chunk);
+            }
+            rendered += samples;
+            for sample in 0..samples {
+                pcm.extend(chunks.iter().map(|chunk| chunk[sample]));
+            }
         }
         pcm
     };
@@ -125,17 +145,20 @@ fn render_sid_preview_blocking(payload: SidPreviewPayload) -> Result<String, Str
         }
         let sessions = SID_PREVIEW_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut sessions = sessions.lock().map_err(|_| "SID preview state is unavailable.")?;
-        sessions.retain(|_, (_, _, last_used)| last_used.elapsed() < Duration::from_secs(180));
+        sessions.retain(|_, (_, last_used)| last_used.elapsed() < Duration::from_secs(180));
         if !sessions.contains_key(session_id) && sessions.len() >= 16 {
             return Err("Too many active SID previews.".to_string());
         }
-        let (sid, last_ctl, last_used) = sessions.entry(session_id.to_string()).or_insert_with(|| {
-            (sid_core::SidCore::new(sample_rate, model), [0; 3], Instant::now())
-        });
+        let (chips, last_used) = sessions
+            .entry(session_id.to_string())
+            .or_insert_with(|| (new_chips(), Instant::now()));
+        if chips.len() != chip_count {
+            return Err("Invalid SID preview session.".to_string());
+        }
         *last_used = Instant::now();
-        render_frames(sid, last_ctl)
+        render_frames(chips)
     } else {
-        render_frames(&mut sid_core::SidCore::new(sample_rate, model), &mut [0; 3])
+        render_frames(&mut new_chips())
     };
 
     let bytes: Vec<u8> = pcm.iter().flat_map(|sample| sample.to_le_bytes()).collect();
@@ -183,13 +206,13 @@ fn sid_file_sessions() -> Result<std::sync::MutexGuard<'static, HashMap<String, 
 // The emulation runs on a blocking thread: seeking can take seconds in a
 // debug build and must not occupy the async runtime's workers.
 #[tauri::command]
-async fn render_sid_file(payload: SidFilePayload) -> Result<String, String> {
+async fn render_sid_file(payload: SidFilePayload) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || render_sid_file_blocking(payload))
         .await
         .map_err(|e| format!("SID file playback failed: {e}"))?
 }
 
-fn render_sid_file_blocking(payload: SidFilePayload) -> Result<String, String> {
+fn render_sid_file_blocking(payload: SidFilePayload) -> Result<serde_json::Value, String> {
     if payload.session_id.is_empty()
         || payload.session_id.len() > 80
         || !(1..=20).contains(&payload.frames)
@@ -246,7 +269,10 @@ fn render_sid_file_blocking(payload: SidFilePayload) -> Result<String, String> {
     }
     let pcm = player.render_frames(payload.frames)?;
     let bytes: Vec<u8> = pcm.iter().flat_map(|sample| sample.to_le_bytes()).collect();
-    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    Ok(serde_json::json!({
+        "channels": player.channels(),
+        "pcm": base64::engine::general_purpose::STANDARD.encode(bytes),
+    }))
 }
 
 #[tauri::command]
@@ -301,7 +327,9 @@ fn sid_register_dump_blocking(app: &AppHandle, payload: SidDumpPayload) -> Resul
         "songs": player.songs(),
         "song": player.song(),
         "frameRate": player.frame_rate(),
-        "frameBytes": sid_file::DUMP_FRAME_BYTES,
+        "frameBytes": player.dump_frame_bytes(),
+        "sidCount": player.sid_count(),
+        "sid2Addr": player.second_sid(),
         "name": name,
         "author": author,
         "regs": base64::engine::general_purpose::STANDARD.encode(regs),
@@ -418,10 +446,15 @@ mod sid_file_session_tests {
         }
     }
 
+    // These tests share the global session map, and eviction would drop the
+    // sessions of a test running at the same time.
+    static SESSION_TESTS: Mutex<()> = Mutex::new(());
+
     // A long seek in one session must not stall the main-thread commands
     // (info / release) or another session: that froze the app on track switches.
     #[test]
     fn a_long_seek_does_not_block_other_sessions_or_release() {
+        let _serial = SESSION_TESTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let tune: &[u8] = include_bytes!("../../samples/Ikari_Intro.sid");
         render_sid_file_blocking(payload("seek", Some(tune), 0)).unwrap();
         render_sid_file_blocking(payload("other", Some(tune), 0)).unwrap();
@@ -442,6 +475,7 @@ mod sid_file_session_tests {
     // the oldest one is dropped instead of failing with "Too many active SID files".
     #[test]
     fn unreleased_sessions_are_evicted_not_refused() {
+        let _serial = SESSION_TESTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let tune: &[u8] = include_bytes!("../../samples/Ikari_Intro.sid");
         for n in 0..12 {
             render_sid_file_blocking(payload(&format!("switch-{n}"), Some(tune), 0)).unwrap();
@@ -450,6 +484,40 @@ mod sid_file_session_tests {
         assert!(sessions.len() <= 8);
         assert!(sessions.contains_key("switch-11"));
         assert!(!sessions.contains_key("switch-0"));
+    }
+}
+
+/// Manual check of a SID Editor export: `SID_ASM_IN=<exported .asm> cargo test --lib exported_player -- --ignored --nocapture`
+/// assembles it with VMA and plays it as a PSID v3 with the second SID its header comment names.
+#[cfg(test)]
+mod sid_export_check {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn exported_player_assembles_and_plays() {
+        let Ok(input) = std::env::var("SID_ASM_IN") else { return };
+        let source = fs::read_to_string(input).unwrap();
+        let (_, address) = source.split_once("second SID at $").unwrap();
+        let address = u16::from_str_radix(&address[..4], 16).unwrap();
+        let built = vma_build_raw(source);
+        assert_eq!(built["ok"], true, "{built}");
+        let prg: Vec<u8> = built["prg"].as_array().unwrap().iter().map(|b| b.as_u64().unwrap() as u8).collect();
+        let mut file = vec![0u8; 0x7c];
+        file[..4].copy_from_slice(b"PSID");
+        file[5] = 3;
+        file[7] = 0x7c;
+        file[0x0a] = 0xc0; // init $C000, play through the IRQ the player installs
+        file[0x0f] = 1;
+        file[0x11] = 1;
+        file[0x7a] = ((address - 0xd000) >> 4) as u8;
+        file.extend_from_slice(&prg);
+        let mut player = sid_file::SidFilePlayer::with_song(&file, 44_100, sid_core::SidModel::Mos8580, 1).unwrap();
+        assert_eq!(player.channels(), 2);
+        let pcm = player.render_frames(150).unwrap();
+        let peak = |channel: usize| pcm.chunks(2).map(|pair| i32::from(pair[channel]).abs()).max().unwrap();
+        println!("second SID ${address:04X}, {} prg bytes, peak left {} right {}", prg.len(), peak(0), peak(1));
+        assert!(peak(0) > 500 && peak(1) > 500);
     }
 }
 
@@ -471,8 +539,8 @@ mod sid_preview_tests {
         frame[0x18] = 0x0f;
         let mut pcm = vec![0i16; 882];
         for k in 0..10 {
-            frame[0x19] = if k == 6 && flag { 4 } else { 0 };
-            write_preview_frame(&mut sid, &frame, &mut last);
+            let restart = if k == 6 && flag { 4 } else { 0 };
+            write_preview_frame(&mut sid, &frame, restart, &mut last);
             sid.render(&mut pcm[..if k == 6 { 20 } else { 882 }]);
             if k == 6 {
                 return sid.read(0x1c);
@@ -485,5 +553,54 @@ mod sid_preview_tests {
     fn restart_flag_retriggers_the_envelope_under_a_held_gate() {
         assert_eq!(env_after_restart(false), 0, "sustain 0: the envelope has died out");
         assert!(env_after_restart(true) > 0, "the restart gives a new attack");
+    }
+
+    fn decode(base64_pcm: &str) -> Vec<i16> {
+        base64::engine::general_purpose::STANDARD
+            .decode(base64_pcm)
+            .unwrap()
+            .chunks(2)
+            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+            .collect()
+    }
+
+    fn preview(frames: Vec<Vec<u8>>) -> Result<Vec<i16>, String> {
+        render_sid_preview_blocking(SidPreviewPayload {
+            sample_rate: 44_100,
+            model: "8580".into(),
+            session_id: None,
+            frames,
+        })
+        .map(|pcm| decode(&pcm))
+    }
+
+    /// A frame holding a sawtooth note on voice 1 of the chip at register `at`.
+    fn note_frame(len: usize, at: usize) -> Vec<u8> {
+        let mut frame = vec![0u8; len];
+        frame[at + 1] = 0x20;
+        frame[at + 4] = 0x21;
+        frame[at + 6] = 0xf0;
+        frame[at + 0x18] = 0x0f;
+        frame
+    }
+
+    #[test]
+    fn a_two_sid_frame_renders_each_chip_on_its_own_channel() {
+        let peak = |pcm: &[i16], channel: usize| pcm.chunks(2).map(|pair| i32::from(pair[channel]).abs()).max().unwrap();
+        let second = preview(vec![note_frame(0x33, 0x19); 20]).unwrap();
+        assert_eq!(second.len(), 882 * 20 * 2);
+        let tail = &second[second.len() / 2..];
+        assert!(peak(tail, 1) > 1_000 && peak(tail, 0) * 20 < peak(tail, 1));
+        let first = preview(vec![note_frame(0x33, 0); 20]).unwrap();
+        let tail = &first[first.len() / 2..];
+        assert!(peak(tail, 0) > 1_000 && peak(tail, 1) * 20 < peak(tail, 0));
+    }
+
+    #[test]
+    fn a_one_sid_frame_stays_mono_and_mixed_frame_sizes_are_refused() {
+        assert_eq!(preview(vec![note_frame(0x1a, 0); 5]).unwrap().len(), 882 * 5);
+        assert!(preview(vec![note_frame(0x33, 0), note_frame(0x1a, 0)]).is_err());
+        assert!(preview(vec![note_frame(0x1a, 0), note_frame(0x33, 0)]).is_err());
+        assert!(preview(vec![vec![0u8; 0x20]]).is_err());
     }
 }
