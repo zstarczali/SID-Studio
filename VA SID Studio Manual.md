@@ -432,6 +432,7 @@ Choose the subtune and the length in seconds (up to 900), and press **Import**. 
 - **Notes:** a note starts at a gate edge, and a retrigger within 2 frames counts as one note. A pitch change under a held gate that stays at least 5 frames becomes a new note. NTSC tunes are retuned to the PAL note table.
 - **Rows:** rows start exactly on the note starts. Rows one frame longer (funktempo, swing, tempo changes) are set with `F` effects.
 - **Instruments:** AD / SR, waveform, pulse width and PWM, the filter, and the waveform and pitch of every frame of the note, as a wave table of up to 32 steps. A regular sub-semitone wobble becomes the instrument's vibrato. Identical instruments are shared, up to 128.
+- **Filter and pulse movement:** a filter sweep counts over the whole note, also after the waveform went silent, and it ends where another note restarts the filter. A filter table that falls fast counts by when it gets there, within the player's 127 per frame. A filter LFO bounces between its extremes. An instrument holds the pulse range of all its notes. Pulse and filter still restart at each routed note, so a sweep that runs freely across many notes is only approximated, and pitches that lie between semitones are rounded to the nearest one.
 - **Several SIDs:** a 2SID tune becomes six voices with its second address. A 3SID tune imports its first two SIDs, with a notice.
 - **Not supported:** RSID tunes that start as a BASIC program.
 
