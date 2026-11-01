@@ -4,12 +4,14 @@ A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vani
 [C64 Visual Assembler](https://www.c64va.pro/).
 
 - SID Player: playlists, High Voltage SID Collection, spectrum analyzer, 2SID / 3SID tunes (stereo on VA SID Core)
-- SID Editor: 3-voice tracker (6 voices with a second SID at a selectable address), instruments, wave/arpeggio tables, effects, piano roll, virtual keyboard, MIDI, recording
-- Preview on WebSID or VA SID Core (Rust, cycle-exact 6510 / CIA / VIC-II timing, 6581 and 8580)
-- Import: GoatTracker `.sng`, `.sid`; export: `.bin`, 6502 assembly, UltimateBasic, `.sid` (PSID)
+- SID Editor: 3-voice tracker (6 voices with a second SID at a selectable address), instruments, wave/arpeggio tables, effects, piano roll, per-voice spectrum, virtual keyboard, MIDI, recording
+- Playback and preview on reSID ([resid-rs](https://github.com/binaryfields/resid-rs), the default) or VA SID Core, both in Rust with a cycle-exact 6510 / CIA / VIC-II core, 6581 and 8580
+- Import: GoatTracker `.sng`, `.sid` (a 2SID tune as six voices); export: `.bin`, 6502 assembly, UltimateBasic, `.sid` (PSID)
 
 The app is an empty workspace: the SID Player, the SID Editor and the other windows float in it.
 The edited tune is kept in the app's local storage between runs; `Save .bin` writes it to a file.
+
+User manual: [VA SID Studio Manual.md](VA%20SID%20Studio%20Manual.md) (PDF: `docs/VA SID Studio Manual.pdf`).
 
 ```
 npm install
