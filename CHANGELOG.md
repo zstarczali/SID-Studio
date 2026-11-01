@@ -22,6 +22,10 @@
 
 - Tracker keys: the upper row played a semitone too high from `R` on, and F could not be entered from it.
 
+### .sid import
+
+- Closer to the original, measured on the 13 sample tunes against their replay: filter sweeps (also after the waveform went silent, filter tables, LFOs), the pulse range and speed, wave tables (the frames before the next note no longer break a period, steps can last several frames: 1,600 cut tables became 30), and the release of short drum hits (hard restart only when the tune zeroes the ADSR with the gate).
+
 ### Window
 
 - The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.
