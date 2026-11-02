@@ -2,6 +2,7 @@
 
 ## 1.3.2 - 2026-11-02
 
+- Undo and Redo in the SID Editor: two new buttons in the tracker toolbar, or Ctrl+Z and Ctrl+Y, up to 100 steps. A whole recording is one step.
 - Tempo: the tracker's tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.
 - Moving notes in the horizontal tracker: drag a note's body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note.
 - Note length in the horizontal tracker: a note's right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice's next note, instead of deleting it.

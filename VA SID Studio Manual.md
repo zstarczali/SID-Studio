@@ -269,6 +269,7 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Pat**, **+**, **−** | Selects, adds or deletes a pattern. |
 | **Play** | **All** plays the song, **Pattern** plays the current pattern. |
 | **SID** | 1 or 2 chips: see [Two SIDs](#13-two-sids). |
+| **Undo**, **Redo** | Or Ctrl+Z and Ctrl+Y. They step through the changes of the notes, instruments, song and tempo and the loading of a tune, up to 100 steps. A knob's drag or a whole recording is one step, and the view jumps to the instrument and pattern that changed. Text fields keep their own Ctrl+Z. |
 | **Frames/row**, **−**, **+** | 1–255, so a higher number is slower. |
 | **BPM** | Shows the resulting tempo: with 4 rows per beat on PAL, 6 frames/row = 125 BPM. |
 | **Oct**, **−**, **+** | Octave for note entry. |

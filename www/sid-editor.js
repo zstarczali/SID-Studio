@@ -734,8 +734,10 @@ function _sidMidiMessage(event) {
   const dialog = document.getElementById("sid-editor-dialog");
   if (!dialog?.open || !_sidInited) return;
   if (_sidRecording && _sidMidiPoly) _sidRecordPolyNote(note, midiNote);
-  else if (_sidRecording || _sidVkbdInsertMode) _sidInsertNoteAtSelection(note, true);
-  else {
+  else if (_sidRecording || _sidVkbdInsertMode) {
+    _sidInsertNoteAtSelection(note, true);
+    if (typeof _sidHistSchedule === "function") _sidHistSchedule();
+  } else {
     _sidEnsureAudio();
     _sidPlayInst(_sidCurInst(), _sidNoteFreq(note), _sidAudio.currentTime + 0.01, 0.7);
     _sidFlashVirtualKeyboardNotes([note]);
@@ -2392,6 +2394,86 @@ function _sidSetupRoll() {
   }, { passive: false });
 }
 
+/* Undo / redo of the SID Editor. The tune changes in too many places to mark each one, so after a
+ * user action the whole tune is compared with the last saved state: a knob's drag or a whole
+ * recording is one step. A pattern that did not change shares its string with the state before. */
+var _sidHist = { cur: null, undo: [], redo: [], timer: null };
+const _SID_HIST_MAX = 100;
+function _sidHistSnap(prev) {
+  const title = document.getElementById("sid-tune-title");
+  return {
+    insts: JSON.stringify(_sidInsts),
+    pats: _sidPatterns.map(function(pat, i) {
+      const text = JSON.stringify(pat);
+      return prev && prev.pats[i] === text ? prev.pats[i] : text;
+    }),
+    song: JSON.stringify(_sidSong), speed: _sidSpeed, sid2: _sidSid2Addr, title: title ? title.textContent : "",
+  };
+}
+function _sidHistSame(a, b) {
+  return a.insts === b.insts && a.song === b.song && a.speed === b.speed && a.sid2 === b.sid2 && a.title === b.title
+    && a.pats.length === b.pats.length && a.pats.every(function(text, i) { return text === b.pats[i]; });
+}
+function _sidHistRender() {
+  const set = function(id, on) { const el = document.getElementById(id); if (el) el.disabled = !on; };
+  set("sid-undo", _sidHist.undo.length > 0);
+  set("sid-redo", _sidHist.redo.length > 0);
+}
+function _sidHistCheck() {
+  clearTimeout(_sidHist.timer);
+  _sidHist.timer = null;
+  // a recording is one step: it is saved when it stops
+  if (!_sidPatterns || _sidRecording) return;
+  const h = _sidHist, now = _sidHistSnap(h.cur);
+  if (h.cur && _sidHistSame(h.cur, now)) return;
+  if (h.cur) {
+    h.undo.push(h.cur);
+    if (h.undo.length > _SID_HIST_MAX) h.undo.shift();
+    h.redo.length = 0;
+  }
+  h.cur = now;
+  _sidHistRender();
+}
+function _sidHistSchedule() {
+  if (!document.getElementById("sid-editor-dialog")?.open) return;
+  clearTimeout(_sidHist.timer);
+  _sidHist.timer = setTimeout(_sidHistCheck, 300);
+}
+// Shows what changed: the instrument and the pattern that differ, with the song step that plays it.
+function _sidHistApply(to, from) {
+  const parse = function(text) { return JSON.parse(text); };
+  const before = parse(from.insts);
+  _sidInsts = parse(to.insts);
+  _sidPatterns = to.pats.map(parse);
+  _sidSong = parse(to.song);
+  _sidSpeed = to.speed;
+  _sidSid2Addr = to.sid2;
+  const inst = _sidInsts.findIndex(function(x, i) { return JSON.stringify(x) !== JSON.stringify(before[i]); });
+  _sidInst = Math.max(0, Math.min(_sidInsts.length - 1, inst >= 0 ? inst : _sidInst));
+  const pat = to.pats.findIndex(function(text, i) { return text !== from.pats[i]; });
+  _sidPat = Math.max(0, Math.min(_sidPatterns.length - 1, pat >= 0 ? pat : _sidPat));
+  _sidSongPos = Math.max(0, Math.min(_sidSong.length - 1, _sidSongPos));
+  if (_sidSong[_sidSongPos] !== _sidPat && _sidSong.includes(_sidPat)) _sidSongPos = _sidSong.indexOf(_sidPat);
+  _sidSelAnchor = null;
+  const speed = document.getElementById("sid-speed");
+  if (speed) speed.value = String(_sidSpeed);
+  _sidUpdateBpmDisplay();
+  if (to.title !== from.title) _sidSetTuneTitle(to.title);
+  _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
+}
+function _sidHistStep(from, into) {
+  if (_sidRecording) return;
+  _sidHistCheck();
+  if (!from.length) return;
+  const to = from.pop();
+  into.push(_sidHist.cur);
+  _sidHistApply(to, _sidHist.cur);
+  _sidHist.cur = _sidHistSnap(to);
+  _sidHistRender();
+}
+function _sidUndo() { _sidHistStep(_sidHist.undo, _sidHist.redo); }
+function _sidRedo() { _sidHistStep(_sidHist.redo, _sidHist.undo); }
+
 function _sidPreviewSelectedRow() {
   const pat = _sidCurPat();
   const row = Math.max(0, Math.min(_SID_ROWS - 1, _sidSel.row));
@@ -2742,6 +2824,7 @@ function _sidRecordStop() {
   if (rec.timer) clearInterval(rec.timer);
   _sidRecording = null;
   _sidRecordRender();
+  if (typeof _sidHistSchedule === "function") _sidHistSchedule();
 }
 
 function _sidToggleRecord() { if (_sidRecording) _sidRecordStop(); else _sidRecordStart(); }
@@ -5158,6 +5241,7 @@ function _sidDeserialize(src) {
   _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
+  if (typeof _sidHistSchedule === "function") _sidHistSchedule();
 }
 
 /* ── GoatTracker 2 (.sng, GTS3–GTS5) import ─────────────────────────────────
@@ -5966,6 +6050,7 @@ function _sidApplyImportedTune(res, title) {
   _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
+  if (typeof _sidHistSchedule === "function") _sidHistSchedule();
 }
 
 let _sidSidImportBytes = null;
@@ -7146,6 +7231,7 @@ function setupSidEditor() {
     }
     dialog._applyPosition?.();
     if (!_sidInited) { _sidInit(); _sidAutosaveStart(); }
+    if (!_sidHist.cur) _sidHistCheck();
     _sidEditorEngineSync(); _sidLcdIdle(); dialog.show();
     // place the detached tracker before the first paint (no jump from the default spot)
     _sidRestoreTrackerFloat();
@@ -7460,6 +7546,27 @@ function setupSidEditor() {
     if (k === "+" || k === "*" || e.key === "PageUp")   { _sidSetOctave(_sidOctave+1); e.preventDefault(); }
     if (k === "-" || k === "/" || e.key === "PageDown") { _sidSetOctave(_sidOctave-1); e.preventDefault(); }
   });
+
+  // Undo / redo. Text fields keep their own Ctrl+Z.
+  onId("sid-undo", "click", _sidUndo);
+  onId("sid-redo", "click", _sidRedo);
+  ["pointerup", "keyup", "change", "input", "wheel"].forEach(function(type) {
+    window.addEventListener(type, _sidHistSchedule, { capture: true, passive: true });
+  });
+  // on the window: a button that has just gone disabled leaves the focus outside the dialog
+  window.addEventListener("keydown", function(e) {
+    if (!dialog.open || !(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k !== "z" && k !== "y") return;
+    const el = e.target;
+    const inDialog = el.closest && el.closest("dialog");
+    if (inDialog && inDialog !== dialog) return;
+    if (el instanceof HTMLTextAreaElement || el.isContentEditable) return;
+    if (el instanceof HTMLInputElement && !["checkbox", "radio", "range", "button"].includes(el.type)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (k === "y" || e.shiftKey) _sidRedo(); else _sidUndo();
+  }, true);
 
   // Voice copy/paste
   onId("sid-voice-copy", "click", function(){
@@ -7907,6 +8014,8 @@ function _sidApplyTranslations() {
     .forEach(id => setAttr("#" + id, t("close")));
   setAttr("#sid-midi-input", t("sidMidiInputAria"));
   setAttr("#sid-bpm", t("sidBpmTip"));
+  setAttr("#sid-undo", t("sidUndo"));
+  setAttr("#sid-redo", t("sidRedo"));
   ["#sid-metronome", "#sid-roll-metronome", "#sid-vkbd-metronome"].forEach(sel => setAttr(sel, t("sidMetronome")));
   setAttr("#sid-roll .sid-roll-voices", t("sidRollVoice"));
   if (_confirmYes) _confirmYes.textContent = t("sidConfirmYes");
