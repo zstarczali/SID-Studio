@@ -96,6 +96,13 @@ Use "Open Anyway" for this application if that option is shown.
 
     WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PACKAGE_NAME.AppImage
 
+- No sound on Linux, with "GStreamer element ... not found" in the terminal:
+  The player seems to run, but stays silent. Install these packages:
+
+    sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-alsa gstreamer1.0-pulseaudio
+
+  The .deb and .rpm packages ask for them, and the AppImage carries them.
+
 - Opening www/index.html directly in a browser does not work fully:
   Use the installed application. Desktop features require its bundled
   Tauri/Rust backend.

@@ -49,7 +49,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-alsa gstreamer1.0-pulseaudio libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - uses: actions/setup-node@v7
         with:
@@ -84,6 +84,19 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$APP/Contents/Info.plist")" = AppIcon
           test -s "$APP/Contents/Resources/icon.icns"
           codesign --verify --deep --strict "$APP"
+
+      # WebKitGTK plays Web Audio through GStreamer: without these the player runs in silence.
+      - name: Verify the sound plugins of the Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          BUNDLE="$PWD/src-tauri/target/${{ matrix.target }}/release/bundle"
+          dpkg-deb -f "$BUNDLE"/deb/*.deb Depends | grep -q gstreamer1.0-plugins-good
+          cd "$(mktemp -d)"
+          "$BUNDLE"/appimage/*.AppImage --appimage-extract > /dev/null
+          for plugin in libgstapp.so libgstautodetect.so; do
+            find squashfs-root -name "$plugin" | grep -q . || { echo "missing: $plugin"; exit 1; }
+          done
 
       - uses: actions/upload-artifact@v7
         with:
