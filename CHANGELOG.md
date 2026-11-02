@@ -2,6 +2,9 @@
 
 ## 1.3.2 - 2026-11-02
 
+- Tempo: the tracker's tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.
+- Moving notes in the horizontal tracker: drag a note's body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note.
+- Note length in the horizontal tracker: a note's right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice's next note, instead of deleting it.
 - Connect MIDI: on Windows the web view no longer asks for permission in a dialog of its own.
 - Loading a .bin: the tracker opens on the selected first song step; a tune whose song does not start with pattern 0 showed pattern 0 instead.
 - SID Player Pause: it pauses every time now (a chunk rendered at that moment, or a note from the SID Editor, could switch the sound back on), and pressing it again continues.
