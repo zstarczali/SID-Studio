@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 - 2026-11-02
+
+- macOS 26: the app icon fills the whole icon shape, with no light frame around it. It is an Icon Composer package (`src-tauri/icons/AppIcon.icon`), compiled to `Assets.car` at build time; building for macOS needs Xcode 26. Older macOS versions keep `icon.icns`.
+- readme: what to do about a blank window on Linux with `Failed to create GBM buffer`.
+
 ## 1.3.0 - 2026-11-01
 
 ### SID engine

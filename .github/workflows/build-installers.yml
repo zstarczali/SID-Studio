@@ -29,12 +29,12 @@ jobs:
             target: aarch64-pc-windows-msvc
             bundles: nsis
           - name: macos-arm64
-            os: macos-latest
+            os: macos-26
             target: aarch64-apple-darwin
             bundles: dmg
           # cross-compiled on the ARM64 runner
           - name: macos-x64
-            os: macos-latest
+            os: macos-26
             target: x86_64-apple-darwin
             bundles: dmg
           # the oldest supported Ubuntu, so the packages also run on older glibc versions
@@ -72,6 +72,17 @@ jobs:
         env:
           # ad-hoc signature: without any, macOS reports the app as damaged on Apple Silicon
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
+
+      - name: Verify the macOS app icon
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="src-tauri/target/${{ matrix.target }}/release/bundle/macos/VA SID Studio.app"
+          test -s "$APP/Contents/Resources/Assets.car"
+          cmp src-tauri/icons/generated/Assets.car "$APP/Contents/Resources/Assets.car"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$APP/Contents/Info.plist")" = AppIcon
+          test -s "$APP/Contents/Resources/icon.icns"
+          codesign --verify --deep --strict "$APP"
 
       - uses: actions/upload-artifact@v7
         with:
