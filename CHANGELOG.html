@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>CHANGELOG.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*
+
+Visual Studio-like style based on original C# coloring by Jason Diamond <jason@diamond.name>
+
+*/
+.hljs {
+  background: white;
+  color: black
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-variable {
+  color: #008000
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag {
+  color: #00f
+}
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition {
+  color: #a31515
+}
+.hljs-deletion,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-meta {
+  color: #2b91af
+}
+.hljs-doctag {
+  color: #808080
+}
+.hljs-attr {
+  color: #f00
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #00b0e8
+}
+.hljs-emphasis {
+  font-style: italic
+}
+.hljs-strong {
+  font-weight: bold
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> or <div class="page"></div> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+<link rel="stylesheet" href="file://f:\\Development\\VisualAssembler\\manual.css"" type="text/css">
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="changelog">Changelog</h1>
+<h2 id="131---2026-11-02">1.3.1 - 2026-11-02</h2>
+<ul>
+<li>Linux: no more blank window with <code>Failed to create GBM buffer</code>. The app turns off WebKitGTK's DMA-BUF renderer unless <code>WEBKIT_DISABLE_DMABUF_RENDERER</code> is already set.</li>
+</ul>
+<h2 id="130---2026-11-01">1.3.0 - 2026-11-01</h2>
+<h3 id="sid-engine">SID engine</h3>
+<ul>
+<li>reSID in place of WebSID: the SID Player and the SID Editor play on the native backend, on resid-rs (a Rust port of<br>
+reSID, the default) or on VA SID Core, both with the MOS 6581 or 8580. A saved WebSID setting moves to reSID.</li>
+<li>Seeking, stereo 2SID and 3SID tunes and the C64 core work with both engines.</li>
+<li><strong>Play: All</strong> plays the frame-exact JS model of the exported player, like every other preview. The exported player<br>
+and the <code>.sid</code> export do not change.</li>
+<li><code>src-tauri/vendor/resid-rs</code> is resid-rs 1.1.1 with one fix: the resampler's FIR interpolation overflowed 32 bits<br>
+(<code>VENDORED.md</code>).</li>
+<li>SID Player buffer in seconds: the tune is rendered 10, 15, 20 or 30 s ahead.</li>
+<li>About: reSID and resid-rs in place of the WebSID credit.</li>
+</ul>
+<h3 id="sid-player">SID Player</h3>
+<ul>
+<li>HVSC: the search panel can search composer names only (All / Composer).</li>
+</ul>
+<h3 id="sid-editor">SID Editor</h3>
+<ul>
+<li>Tracker keys: the upper row played a semitone too high from <code>R</code> on, and F could not be entered from it.</li>
+</ul>
+<h3 id="sid-import">.sid import</h3>
+<ul>
+<li>Closer to the original, measured on the 13 sample tunes against their replay: filter sweeps (also after the waveform went silent, filter tables, LFOs), the pulse range and speed, wave tables (the frames before the next note no longer break a period, steps can last several frames: 1,600 cut tables became 30), and the release of short drum hits (hard restart only when the tune zeroes the ADSR with the gate).</li>
+</ul>
+<h3 id="window">Window</h3>
+<ul>
+<li>The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.</li>
+<li>VA-VK: the active window's header was unreadable on the light themes.</li>
+<li>SID Editor: the editor itself comes to the front when active, over its floating panels. The VA-VK button brings it back from behind.</li>
+</ul>
+<h3 id="manual">Manual</h3>
+<ul>
+<li>New user manual in English: <code>VA SID Studio Manual.md</code>, printed to <code>docs/VA SID Studio Manual.pdf</code>. The installers carry the PDF, and the new Manual toolbar button opens it.</li>
+</ul>
+<h2 id="120---2026-11-01">1.2.0 - 2026-11-01</h2>
+<h3 id="two-sids">Two SIDs</h3>
+<ul>
+<li>SID Player: VA SID Core plays PSID v3 / v4 tunes with two or three SIDs, in stereo: SID 1 left, SID 2 right, a<br>
+third SID in the centre. Mono tunes stay mono.</li>
+<li>SID Editor: a tune has one or two SIDs (<code>SID: 1 / 2</code> in the tracker row), so 3 or 6 voices. Tracker, selection,<br>
+paste, keyboard navigation and the horizontal tracker all follow; dropping the second SID asks first if its voices<br>
+are in use.</li>
+<li>SID Editor: the second SID's address can be set to anything a PSID header can state: <code>$D420</code>-<code>$D7E0</code> and<br>
+<code>$DE00</code>-<code>$DFE0</code>.</li>
+<li>Filter and volume are per SID: a voice drives the filter of its own chip.</li>
+<li>Preview in stereo on VA SID Core and the Web Audio synth; WebSID gets the second SID from the PSID header.</li>
+<li>Export: the <code>.asm</code> and <code>.sid</code> exports have a 6-voice player and a PSID v3 header with the second SID's address.</li>
+<li><code>.sid</code> import: a two-SID tune becomes six voices and keeps its second SID address. With three SIDs the first two<br>
+are imported, with a notice.</li>
+<li>Save: two-SID tunes use a new <code>.bin</code> format (<code>0xFC</code>). One-SID tunes keep the old format, and old saves still load.</li>
+</ul>
+<p>Limits: the <code>.asm</code> and <code>.sid</code> exports of a two-SID tune hold at most 46 patterns. The UltimateBasic export holds the<br>
+first three voices only. The BASIC DATA export numbers its lines further apart for two-SID tunes.</p>
+<h3 id="sid-editor-1">SID Editor</h3>
+<ul>
+<li>New channel spectrum window: one 16-band analyzer per voice during tracker playback. It is computed from the played<br>
+registers (frequency, waveform, pulse width, approximated ADSR, filter, volume), not from the audio, so ring<br>
+modulation, sync and filter resonance do not show, and neither do notes played from the keyboard or MIDI.</li>
+<li>Horizontal tracker: the instrument list fills the full width in even columns and scrolls after about four rows. With<br>
+many instruments it used to squeeze the note view to almost nothing. The help text has its own line.</li>
+<li>Removed the separate <code>New tune</code> button; <code>Files &gt; New tune</code> remains.</li>
+</ul>
+<h3 id="other">Other</h3>
+<ul>
+<li>Settings: the LCD colour, SID engine and SID chip are loaded at startup. They used to wait for the SID Editor's<br>
+first opening, so the LCD looked green and the SID Player used WebSID until then.</li>
+<li>About: removed the VICE credit line. The README still states the VICE origin and license of the C64 emulation.</li>
+<li>GitHub Actions: a <code>Build installers</code> workflow for Windows and macOS (x64, ARM64) and Linux (x64), started by hand or<br>
+by a <code>v*</code> tag.</li>
+<li>Tests: two session tests that shared global state no longer run at the same time.</li>
+</ul>
+
+</body>
+</html>
