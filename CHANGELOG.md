@@ -10,7 +10,7 @@
 - SID Player Pause: it pauses every time now (a chunk rendered at that moment, or a note from the SID Editor, could switch the sound back on), and pressing it again continues.
 - Stop in Play: All: the tracker returns to the pattern that was open before playback, instead of staying on the last one played.
 - Poly record from MIDI: with **Poly record** on, the keys held while recording go to voices of their own, and a release writes a note-off.
-- Notes played live on reSID no longer click before they start, with either the 6581 or the 8580.
+- No click on reSID: neither before notes played live, nor on the first note of a tune that does not begin on the first row, with either the 6581 or the 8580.
 
 ## 1.3.1 - 2026-11-02
 
