@@ -4684,6 +4684,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "urlencoding",
  "vma",
+ "webview2-com",
 ]
 
 [[package]]

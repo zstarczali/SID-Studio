@@ -27,6 +27,10 @@ base64 = "0.22"
 vma = { git = "https://github.com/zstarczali/VMA.git", branch = "main" }
 
 # the SID emulation runs slower than real time unoptimised
+# the version wry uses: it moves together with Tauri
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+
 [profile.dev]
 opt-level = 1
 

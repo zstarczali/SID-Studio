@@ -429,8 +429,13 @@ let _sidCellClip = null;
 
 // cell-range clipboard: [{note,inst},...] from Ctrl+C
 let _sidAudio = null;
+// The SID Player's own context: its Pause suspends it, and nothing else may wake it up.
+// On the shared one every editor note and every rendered chunk undid the pause.
+let _sidExtAudio = null, _sidExtGain = null, _sidVizExt = null;
 
 var _sidTimer = null, _sidRow = 0, _sidPlayPat = 0;
+// "Play: All" follows the song in the tracker; Stop returns to what was open before it
+var _sidPlayReturn = null;
 
 // AudioBufferSourceNodes of the rendered preview (note previews and the
 // Web Audio pattern playback) — _sidStop stops them all.
@@ -2342,6 +2347,15 @@ function _sidEnsureAudio() {
   return _sidAudio;
 }
 
+function _sidPlayerAudio() {
+  if (!_sidExtAudio) {
+    _sidExtAudio = new (window.AudioContext || window.webkitAudioContext)();
+    _sidExtGain = _sidExtAudio.createGain();
+    _sidExtGain.gain.value = _sidMasterVol;
+    _sidExtGain.connect(_sidExtAudio.destination);
+  }
+  return _sidExtAudio;
+}
 // Sets the shared SID volume (0-100) and keeps the SID Editor and the SID
 // player knobs in step; persisted as c64va-sid-master-vol.
 function _sidSetMasterVolume(pct, persist = true) {
@@ -2426,10 +2440,13 @@ function _sidLoadMasterVolume() {
 }
 
 function _sidApplyMasterVolume() {
-  if (_sidMasterGain) {
-    try { _sidMasterGain.gain.setTargetAtTime(_sidMasterVol, _sidMasterGain.context.currentTime, 0.02); }
-    catch(_) { _sidMasterGain.gain.value = _sidMasterVol; }
-  }
+  [_sidMasterGain, _sidExtGain].forEach(function(node) {
+    if (!node) return;
+    // a suspended context's clock stands, so a ramp would wait for the resume
+    if (node.context.state === "suspended") { node.gain.value = _sidMasterVol; return; }
+    try { node.gain.setTargetAtTime(_sidMasterVol, node.context.currentTime, 0.02); }
+    catch(_) { node.gain.value = _sidMasterVol; }
+  });
 }
 /* Note preview: `inst` plays for holdSec, then the gate is released: one engine
    voice with the release tail, on the backend's SID or (no backend) the synth. */
@@ -2838,7 +2855,7 @@ function _sidExtPlay() {
   if (_sidExtStatus === "paused") {
     if (_sidExternalCore) {
       _sidExternalCore.paused = false;
-      _sidEnsureAudio();
+      _sidPlayerAudio().resume();
     }
     _sidExtSetStatus("playing");
     return;
@@ -2848,10 +2865,11 @@ function _sidExtPlay() {
 }
 
 function _sidExtPause() {
+  if (_sidExtStatus === "paused") { _sidExtPlay(); return; }
   if (_sidExtStatus !== "playing") return;
   if (_sidExternalCore) {
     _sidExternalCore.paused = true;
-    if (_sidAudio) _sidAudio.suspend();
+    if (_sidExtAudio) _sidExtAudio.suspend();
   }
   _sidExtSetStatus("paused");
 }
@@ -3763,18 +3781,24 @@ function _sidVizRowHue(row, rows) {
   return 125 - (row / Math.max(1, rows - 1)) * 100;
 }
 
+function _sidVizTap(gain) {
+  const an = gain.context.createAnalyser();
+  an.fftSize = 2048;
+  an.minDecibels = -90;
+  an.maxDecibels = -25;
+  an.smoothingTimeConstant = 0.55;
+  gain.connect(an);
+  return an;
+}
 function _sidVizAnalysers() {
   const list = [];
   if (_sidAudio && _sidMasterGain) {
-    if (!_sidVizVa) {
-      _sidVizVa = _sidAudio.createAnalyser();
-      _sidVizVa.fftSize = 2048;
-      _sidVizVa.minDecibels = -90;
-      _sidVizVa.maxDecibels = -25;
-      _sidVizVa.smoothingTimeConstant = 0.55;
-      _sidMasterGain.connect(_sidVizVa);
-    }
+    if (!_sidVizVa) _sidVizVa = _sidVizTap(_sidMasterGain);
     list.push(_sidVizVa);
+  }
+  if (_sidExtGain) {
+    if (!_sidVizExt) _sidVizExt = _sidVizTap(_sidExtGain);
+    list.push(_sidVizExt);
   }
   return list;
 }
@@ -4150,7 +4174,7 @@ function _sidExternalCoreStop(keepDialog = false) {
   if (state.timer) clearInterval(state.timer);
   _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
   _sidExtSources.clear();
-  if (state.paused && _sidAudio) _sidAudio.resume();
+  if (state.paused && _sidExtAudio) _sidExtAudio.resume();
   if (!keepDialog) _sidPlayerHideWindow();
   // released at once: a render still in flight finishes on its own session
   // lock, and waiting for it let stale sessions pile up on quick switches
@@ -4163,7 +4187,8 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
     return false;
   }
   _sidStop(true);
-  const ac = _sidEnsureAudio();
+  const ac = _sidPlayerAudio();
+  if (ac.state === "suspended") ac.resume();
   // A renderer hosszú DOM-művelet alatt nem fut. Tíz másodpercnyi már az
   // AudioContext szálán ütemezett hang ezért akkor is folytatódik.
   const aheadTarget = _sidPlayerAheadSeconds(_sidPlayerBufferSize());
@@ -4192,7 +4217,7 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
         state.renderedMs += state.skipMs + samples * 1000 / ac.sampleRate;
         state.skipMs = 0;
         state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
-        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels);
+        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels, _sidExtGain);
         state.nextTime += samples / ac.sampleRate;
         // A Web Audio szál előre ütemezett hangja UI-terhelés alatt is tovább szól.
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < aheadTarget);
@@ -4398,6 +4423,13 @@ function _sidStop(stopExternal = false) {
   const t = document.getElementById("sid-tracker");
   if (t) t.querySelectorAll("tr.sid-playing").forEach(function(r){ r.classList.remove("sid-playing"); });
   _sidUpdatePauseButton();
+  const back = _sidPlayReturn;
+  _sidPlayReturn = null;
+  if (back) {
+    // a song step picked during playback wins
+    const pat = back.songPos === _sidSongPos ? back.pat : _sidSong[_sidSongPos];
+    if (pat !== _sidPat) _sidSetPattern(pat, true);
+  }
   _sidBuildSongList();
   if (typeof _sidLcdIdle === "function") _sidLcdIdle();
 }
@@ -4409,9 +4441,11 @@ async function _sidPlay(resetPosition = true) {
   if (resetPosition) {
     _sidSongPlayPos = 0;
     if (playAll) {
+      if (!_sidPlayReturn) _sidPlayReturn = { pat: _sidPat, songPos: _sidSongPos };
       _sidPlayPat = (_sidSong && _sidSong.length) ? _sidSong[0] : 0;
       _sidSetPattern(_sidPlayPat, true);
     } else {
+      _sidPlayReturn = null;
       _sidPlayPat = _sidPat;
     }
     _sidRow = 0;
@@ -4803,8 +4837,9 @@ function _sidRenderEngine(e, frames, sr, hook) {
 }
 
 // channels: 1, or 2 for interleaved stereo (tunes with several SIDs)
-function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = data.channels || 1) {
-  const ac = _sidEnsureAudio();
+// output: the node to play into, on a context of its own that must not be woken up here
+function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = data.channels || 1, output = null) {
+  const ac = output ? output.context : _sidEnsureAudio();
   const samples = Math.max(1, data.length / channels);
   const buf = ac.createBuffer(channels, samples, ac.sampleRate);
   for (let c = 0; c < channels; c++) {
@@ -4814,7 +4849,7 @@ function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = dat
   }
   const src = ac.createBufferSource();
   src.buffer = buf;
-  src.connect(_sidMasterGain || ac.destination);
+  src.connect(output || _sidMasterGain || ac.destination);
   src.start(Math.max(ac.currentTime, when));
   sources.add(src);
   src.onended = function() { sources.delete(src); };
@@ -5002,7 +5037,7 @@ function _sidDeserialize(src) {
   _sidSong = _sidSong.map(function(idx){ return Math.max(0, Math.min(_sidPatterns.length - 1, idx|0)); });
   _sidSongPos = 0;
   _sidSongPlayPos = 0;
-  _sidInst = 0; _sidPat = 0; _sidPlayPat = 0;
+  _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
 }
@@ -5810,7 +5845,7 @@ function _sidApplyImportedTune(res, title) {
   if (speedEl) speedEl.value = String(_sidSpeed);
   if (typeof _sidUpdateBpmDisplay === "function") _sidUpdateBpmDisplay();
   _sidSongPos = 0; _sidSongPlayPos = 0;
-  _sidInst = 0; _sidPat = 0; _sidPlayPat = 0;
+  _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
 }

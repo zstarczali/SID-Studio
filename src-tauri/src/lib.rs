@@ -1,6 +1,7 @@
 // VA SID Studio backend: SID emulation (VA SID Core), .sid register dump, the VMA build of the player, file saving.
 mod c64;
 mod hvsc;
+mod midi_permission;
 mod mos6510;
 mod sid_chip;
 mod sid_core;
@@ -451,6 +452,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                midi_permission::allow_without_prompt(&window);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             render_sid_preview,
             release_sid_preview,

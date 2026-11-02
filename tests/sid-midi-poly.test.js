@@ -162,9 +162,19 @@ test("the recording's tick writes the note-off that was due", () => {
 test("the switch is on the page, and in all seven languages", () => {
   const html = fs.readFileSync(path.join(www, "index.html"), "utf8");
   assert.ok(html.includes('id="sid-midi-poly"') && html.includes('id="sid-midi-poly-label"'));
+  assert.match(html, /<div class="sid-midi-wrap">\s*<button id="sid-virtual-keyboard"/, "the keyboard button wraps with the MIDI controls");
   const i18n = fs.readFileSync(path.join(www, "i18n.js"), "utf8");
   assert.equal(i18n.split('"sidMidiPoly"').length - 1, 7);
   assert.ok(source.includes('setText("#sid-midi-poly-label", t("sidMidiPoly"))'));
   assert.ok(source.includes('"c64va-sid-midi-poly"'));
   assert.match(source, /var _sidMidiPoly;/, "the setup loads it before the declaration runs: no let, and no initializer to overwrite it");
+});
+
+test("WebView2's MIDI question is answered by the backend, and only that one", () => {
+  const tauri = path.join(__dirname, "..", "src-tauri");
+  const rust = fs.readFileSync(path.join(tauri, "src", "midi_permission.rs"), "utf8");
+  assert.ok(rust.includes("if kind == COREWEBVIEW2_PERMISSION_KIND_MIDI_SYSTEM_EXCLUSIVE_MESSAGES {"));
+  assert.equal(rust.split("SetState(").length - 1, 1, "every other permission stays with WebView2");
+  const lib = fs.readFileSync(path.join(tauri, "src", "lib.rs"), "utf8");
+  assert.ok(lib.includes("mod midi_permission;") && lib.includes("midi_permission::allow_without_prompt(&window)"));
 });
