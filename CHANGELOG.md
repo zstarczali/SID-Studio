@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2 - 2026-11-02
+
+- Poly record from MIDI: with **Poly record** on, the keys held while recording go to voices of their own, and a release writes a note-off.
+- Notes played live on reSID no longer click before they start, with either the 6581 or the 8580.
+
 ## 1.3.1 - 2026-11-02
 
 - macOS 26: the app icon fills the whole icon shape, with no light frame around it. It is an Icon Composer package (`src-tauri/icons/AppIcon.icon`), compiled to `Assets.car` at build time; building for macOS needs Xcode 26. Older macOS versions keep `icon.icns`.

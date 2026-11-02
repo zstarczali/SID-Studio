@@ -1024,6 +1024,7 @@ button:focus-visible {
 }
 .sid-midi-wrap { display: inline-flex; align-items: center; gap: 6px; }
 .sid-midi-input { width: 150px; max-width: 20vw; }
+.sid-midi-poly { white-space: nowrap; }
 .sid-midi-led { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; background: #5a2222; border: 1px solid rgba(255,255,255,0.28); box-shadow: inset 0 1px 2px rgba(0,0,0,0.8); transition: background 0.15s ease-out, box-shadow 0.15s ease-out; }
 .sid-midi-led.sid-midi-led--on { background: #ff4545; box-shadow: 0 0 8px #ff4545; transition: none; }
 .sid-master-vol-wrap ~ .sid-xbtn { margin-left: 0; }

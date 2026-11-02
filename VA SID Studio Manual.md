@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.3.1**
+**Version 1.3.2**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -390,6 +390,8 @@ The **Virtual keyboard** button opens VA-VK, a piano of 2, 3 or 4 octaves that p
 ### MIDI
 
 Press **Connect MIDI** next to the instrument name, then choose the input in the **MIDI** list. Notes play the current instrument, and they are written into the tracker while recording or with *Insert into tracker* on. The lamp flashes on every incoming message.
+
+With **Poly record** on, the keys you hold while recording go to voices of their own, from the selected voice on: a chord of three lands on three voices. Releasing a key writes a note-off, and when every voice is held, the oldest key gives up its voice.
 
 MIDI depends on the web view of your system. Where it is not available, the app says so when you press **Connect MIDI**.
 

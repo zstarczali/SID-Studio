@@ -472,6 +472,7 @@ let _sidMidiAccess = null;
 let _sidMidiInputId = "";
 
 let _sidMidiHeld = new Set();
+var _sidMidiPoly; // no initializer: setupSidEditor loads it before this line runs
 
 let _sidRecording = null;
 
@@ -720,13 +721,15 @@ function _sidMidiMessage(event) {
   const note = Math.max(0, Math.min(95, midiNote - 12)); // MIDI C-1 = SID C-0
   if (command === 0x80 || (command === 0x90 && velocity === 0)) {
     _sidMidiHeld.delete(midiNote);
+    _sidRecordPolyRelease(midiNote);
     return;
   }
   if (command !== 0x90 || _sidMidiHeld.has(midiNote)) return;
   _sidMidiHeld.add(midiNote);
   const dialog = document.getElementById("sid-editor-dialog");
   if (!dialog?.open || !_sidInited) return;
-  if (_sidRecording || _sidVkbdInsertMode) _sidInsertNoteAtSelection(note, true);
+  if (_sidRecording && _sidMidiPoly) _sidRecordPolyNote(note, midiNote);
+  else if (_sidRecording || _sidVkbdInsertMode) _sidInsertNoteAtSelection(note, true);
   else {
     _sidEnsureAudio();
     _sidPlayInst(_sidCurInst(), _sidNoteFreq(note), _sidAudio.currentTime + 0.01, 0.7);
@@ -2551,6 +2554,8 @@ function _sidRecordTick() {
   if (step === rec.lastStep) return;
   rec.lastStep = step;
   rec.row = rec.startRow + step;
+  rec.pendingOff.forEach(function(voice) { _sidRecordPolyOff(rec, voice); });
+  rec.pendingOff.clear();
   _sidSel.voice = rec.voice;
   _sidSel.row = rec.row;
   _sidRefreshSel();
@@ -2568,12 +2573,57 @@ function _sidRecordNote(note) {
   return true;
 }
 
+// Poly record (MIDI): every held key takes a voice of its own, from the selected voice on, and
+// its release writes a note-off, because a voice left alone would ring on. With all voices held
+// the oldest key gives up its voice. A voice with a release due on this row is the last choice,
+// so that a quick melody does not overwrite its own notes.
+const _SID_POLY_CHORD_MS = 40;
+function _sidRecordPolyVoice(rec) {
+  const held = Array.from(rec.held.values(), function(h) { return h.voice; });
+  const order = rec.pattern.map(function(_, i) { return (rec.voice + i) % rec.pattern.length; });
+  const free = order.filter(function(v) { return !held.includes(v); });
+  const ready = free.find(function(v) { return !rec.pendingOff.has(v); });
+  return ready ?? free[0] ?? held[0];
+}
+function _sidRecordPolyNote(note, midiNote) {
+  const rec = _sidRecording;
+  const voice = _sidRecordPolyVoice(rec);
+  rec.held.forEach(function(h, key) { if (h.voice === voice) rec.held.delete(key); });
+  rec.pendingOff.delete(voice);
+  // the keys of a chord may fall on both sides of a row boundary
+  const now = performance.now();
+  const inChord = rec.chord && rec.chord.pattern === rec.pattern && now - rec.chord.at < _SID_POLY_CHORD_MS;
+  if (!inChord) rec.chord = { pattern: rec.pattern, row: rec.row, at: now };
+  const row = rec.chord.row;
+  rec.pattern[voice][row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  _sidSetCellText(voice, row);
+  rec.held.set(midiNote, { voice: voice, pattern: rec.pattern, row: row });
+  _sidEnsureAudio();
+  _sidPlayInst(_sidInsts[rec.inst], _sidNoteFreq(note), _sidAudio.currentTime + 0.01, Math.max(0.08, rec.rowMs / 1000 * 0.9));
+  _sidFlashVirtualKeyboardNotes([note]);
+}
+function _sidRecordPolyOff(rec, voice) {
+  const cell = rec.pattern[voice][rec.row];
+  if (cell && (cell.note != null || cell.fx)) return;
+  rec.pattern[voice][rec.row] = { note: null, inst: 0, fx: "C", fxval: 0 };
+  _sidSetCellText(voice, rec.row);
+}
+function _sidRecordPolyRelease(midiNote) {
+  const rec = _sidRecording;
+  const held = rec && rec.held.get(midiNote);
+  if (!held) return;
+  rec.held.delete(midiNote);
+  // released on its own row: the note-off has to wait for the next one
+  if (held.pattern === rec.pattern && held.row === rec.row) rec.pendingOff.add(held.voice);
+  else _sidRecordPolyOff(rec, held.voice);
+}
 function _sidRecordStart() {
   if (!_sidPatterns) return;
   _sidStop();
   _sidRecording = {
     pattern: _sidCurPat(), voice: _sidSel.voice, inst: _sidInst, startRow: _sidSel.row,
-    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null
+    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null,
+    held: new Map(), pendingOff: new Set(), chord: null
   };
   _sidRecordTick();
   _sidRecording.timer = setInterval(_sidRecordTick, 16);
@@ -7107,6 +7157,13 @@ function setupSidEditor() {
     _dlgRaisePanel(document.getElementById("sid-virtual-keyboard-dialog"));
   });
   onId("sid-midi-connect", "click", _sidMidiConnect);
+  try { _sidMidiPoly = localStorage.getItem("c64va-sid-midi-poly") === "1"; } catch (_) {}
+  const midiPoly = document.getElementById("sid-midi-poly");
+  if (midiPoly) midiPoly.checked = _sidMidiPoly;
+  onId("sid-midi-poly", "change", function(e) {
+    _sidMidiPoly = !!e.target.checked;
+    try { localStorage.setItem("c64va-sid-midi-poly", _sidMidiPoly ? "1" : "0"); } catch (_) {}
+  });
   onId("sid-midi-input", "change", function(e) { _sidMidiSetInput(e.target.value); });
   onId("sid-vkbd-close", "click", function(){
     _sidCloseVirtualKeyboard();
@@ -7504,6 +7561,7 @@ function _sidApplyTranslations() {
   setAttr("#sid-master-vol", t("sidMasterVolume"));
   setText("#sid-midi-lbl", t("sidMidi"));
   setText("#sid-midi-connect", t("sidMidiConnect"));
+  setText("#sid-midi-poly-label", t("sidMidiPoly"));
   setAttr("#sid-record", t("sidRecord"));
   setAttr("#sid-vkbd-record", t("sidRecord"));
   setText("#sid-preview-engine-lbl", t("sidPreviewEngine"));
