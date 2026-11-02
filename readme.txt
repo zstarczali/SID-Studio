@@ -87,6 +87,15 @@ Use "Open Anyway" for this application if that option is shown.
   your distribution's package manager. WebKitGTK 4.0 alone does not
   replace the 4.1 version used by this project.
 
+- Blank window on Linux, with "Failed to create GBM buffer" in the terminal:
+  Start the application like this:
+
+    WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ./PACKAGE_NAME.AppImage
+
+  If the window stays blank, try this instead:
+
+    WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PACKAGE_NAME.AppImage
+
 - Opening www/index.html directly in a browser does not work fully:
   Use the installed application. Desktop features require its bundled
   Tauri/Rust backend.
