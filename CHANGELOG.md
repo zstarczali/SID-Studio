@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.2 - 2026-11-02
+
+- Tempo: the tracker's tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.
+- Moving notes in the horizontal tracker: drag a note's body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note.
+- Note length in the horizontal tracker: a note's right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice's next note, instead of deleting it.
+- Connect MIDI: on Windows the web view no longer asks for permission in a dialog of its own.
+- Loading a .bin: the tracker opens on the selected first song step; a tune whose song does not start with pattern 0 showed pattern 0 instead.
+- SID Player Pause: it pauses every time now (a chunk rendered at that moment, or a note from the SID Editor, could switch the sound back on), and pressing it again continues.
+- Stop in Play: All: the tracker returns to the pattern that was open before playback, instead of staying on the last one played.
+- Poly record from MIDI: with **Poly record** on, the keys held while recording go to voices of their own, and a release writes a note-off.
+- No click on reSID: neither before notes played live, nor on the first note of a tune that does not begin on the first row, with either the 6581 or the 8580.
+
 ## 1.3.1 - 2026-11-02
 
 - macOS 26: the app icon fills the whole icon shape, with no light frame around it. It is an Icon Composer package (`src-tauri/icons/AppIcon.icon`), compiled to `Assets.car` at build time; building for macOS needs Xcode 26. Older macOS versions keep `icon.icns`.

@@ -1,6 +1,6 @@
 [package]
 name = "va-sid-studio"
-version = "1.3.1"
+version = "1.3.2"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -27,6 +27,10 @@ base64 = "0.22"
 vma = { git = "https://github.com/zstarczali/VMA.git", branch = "main" }
 
 # the SID emulation runs slower than real time unoptimised
+# the version wry uses: it moves together with Tauri
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+
 [profile.dev]
 opt-level = 1
 

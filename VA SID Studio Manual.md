@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.3.1**
+**Version 1.3.2**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -269,7 +269,8 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Pat**, **+**, **−** | Selects, adds or deletes a pattern. |
 | **Play** | **All** plays the song, **Pattern** plays the current pattern. |
 | **SID** | 1 or 2 chips: see [Two SIDs](#13-two-sids). |
-| **Speed**, **−**, **+** | Frames per row, 1–255. **BPM** next to it assumes 4 rows per beat (Speed 6 = 125 BPM on PAL). |
+| **Frames/row**, **−**, **+** | 1–255, so a higher number is slower. |
+| **BPM** | Shows the resulting tempo: with 4 rows per beat on PAL, 6 frames/row = 125 BPM. |
 | **Oct**, **−**, **+** | Octave for note entry. |
 | **Preview row** | Plays the selected row on all voices. |
 | **Copy, Paste, Clear** | Work on the selection. |
@@ -352,8 +353,8 @@ The horizontal tracker draws the whole song as notes over time and lets you edit
 | Action | Result |
 |---|---|
 | Click on an empty place | New note on the active voice with the current instrument; drag to set its length |
-| Drag a note | Changes its pitch |
-| Drag a note's right edge | Changes its length |
+| Drag a note | Moves it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note |
+| Drag a note's right end | Stretches or shortens it, up to the voice's next note. Over the end the cursor is a double arrow and a bright bar marks it, on a one-row note as well |
 | Right-click a note | Deletes it |
 | Mouse wheel | Scrolls in time |
 | **Shift** + wheel | Scrolls in pitch |
@@ -385,11 +386,13 @@ The **Virtual keyboard** button opens VA-VK, a piano of 2, 3 or 4 octaves that p
 
 ### Recording
 
-**Record** (the red dot, in the tracker toolbar and on VA-VK) writes the notes you play, in time, into the selected voice from the selected row, at the current Speed. You can play on VA-VK, the computer keyboard or a MIDI keyboard. When the pattern is full, a new empty pattern is added after the current song step and recording goes on there. Press **Record** again to stop.
+**Record** (the red dot, in the tracker toolbar and on VA-VK) writes the notes you play, in time, into the selected voice from the selected row, at the current tempo. You can play on VA-VK, the computer keyboard or a MIDI keyboard. When the pattern is full, a new empty pattern is added after the current song step and recording goes on there. Press **Record** again to stop.
 
 ### MIDI
 
 Press **Connect MIDI** next to the instrument name, then choose the input in the **MIDI** list. Notes play the current instrument, and they are written into the tracker while recording or with *Insert into tracker* on. The lamp flashes on every incoming message.
+
+With **Poly record** on, the keys you hold while recording go to voices of their own, from the selected voice on: a chord of three lands on three voices. Releasing a key writes a note-off, and when every voice is held, the oldest key gives up its voice.
 
 MIDI depends on the web view of your system. Where it is not available, the app says so when you press **Connect MIDI**.
 

@@ -429,8 +429,13 @@ let _sidCellClip = null;
 
 // cell-range clipboard: [{note,inst},...] from Ctrl+C
 let _sidAudio = null;
+// The SID Player's own context: its Pause suspends it, and nothing else may wake it up.
+// On the shared one every editor note and every rendered chunk undid the pause.
+let _sidExtAudio = null, _sidExtGain = null, _sidVizExt = null;
 
 var _sidTimer = null, _sidRow = 0, _sidPlayPat = 0;
+// "Play: All" follows the song in the tracker; Stop returns to what was open before it
+var _sidPlayReturn = null;
 
 // AudioBufferSourceNodes of the rendered preview (note previews and the
 // Web Audio pattern playback) — _sidStop stops them all.
@@ -472,6 +477,7 @@ let _sidMidiAccess = null;
 let _sidMidiInputId = "";
 
 let _sidMidiHeld = new Set();
+var _sidMidiPoly; // no initializer: setupSidEditor loads it before this line runs
 
 let _sidRecording = null;
 
@@ -720,13 +726,15 @@ function _sidMidiMessage(event) {
   const note = Math.max(0, Math.min(95, midiNote - 12)); // MIDI C-1 = SID C-0
   if (command === 0x80 || (command === 0x90 && velocity === 0)) {
     _sidMidiHeld.delete(midiNote);
+    _sidRecordPolyRelease(midiNote);
     return;
   }
   if (command !== 0x90 || _sidMidiHeld.has(midiNote)) return;
   _sidMidiHeld.add(midiNote);
   const dialog = document.getElementById("sid-editor-dialog");
   if (!dialog?.open || !_sidInited) return;
-  if (_sidRecording || _sidVkbdInsertMode) _sidInsertNoteAtSelection(note, true);
+  if (_sidRecording && _sidMidiPoly) _sidRecordPolyNote(note, midiNote);
+  else if (_sidRecording || _sidVkbdInsertMode) _sidInsertNoteAtSelection(note, true);
   else {
     _sidEnsureAudio();
     _sidPlayInst(_sidCurInst(), _sidNoteFreq(note), _sidAudio.currentTime + 0.01, 0.7);
@@ -1959,7 +1967,7 @@ function _sidRollHit(cv, ev) {
   if (x < g.keyW || y < g.rulerH) return null;
   const row = Math.floor(_sidRollView.row0 + (x - g.keyW) / g.colW);
   const pitch = _sidRollView.lo + _sidRollView.span - 1 - Math.floor((y - g.rulerH) / g.rowH);
-  return { row: row, pitch: Math.max(0, Math.min(95, pitch)), x: x, y: y, g: g };
+  return { row: row, rowX: _sidRollView.row0 + (x - g.keyW) / g.colW, pitch: Math.max(0, Math.min(95, pitch)), x: x, y: y, g: g };
 }
 
 function _sidRollNoteAt(notes, hit) {
@@ -1968,6 +1976,73 @@ function _sidRollNoteAt(notes, hit) {
   return notes.find(function(n) { return n.v === _sidRollView.voice && on(n); }) || notes.find(on) || null;
 }
 
+// What a press would take hold of: the right end of a note (length), or its body (moving it). The end's
+// zone reaches a little past the note and takes up to half of a short one, so a one-row note can
+// be caught; a note starting right there keeps its own body.
+function _sidRollGrab(notes, hit) {
+  const g = hit.g, body = _sidRollNoteAt(notes, hit);
+  const atEnd = function(n) {
+    if (n.note !== hit.pitch || (hit.row >= n.end && body)) return false;
+    const xEnd = g.keyW + (n.end - _sidRollView.row0) * g.colW;
+    const inside = Math.min(Math.max(6, g.colW * 0.35), (n.end - n.start) * g.colW / 2);
+    return hit.x >= xEnd - inside && hit.x <= xEnd + Math.min(4, g.colW * 0.3);
+  };
+  const ends = notes.filter(atEnd);
+  const end = ends.find(function(n) { return n.v === _sidRollView.voice; }) || ends[0];
+  if (end) return { note: end, kind: "len" };
+  return body ? { note: body, kind: "move" } : null;
+}
+// a note grows up to the voice's next note, and does not eat it
+function _sidRollNoteLimit(notes, n) {
+  return notes.reduce(function(limit, x) { return x.v === n.v && x.start > n.start ? Math.min(limit, x.start) : limit; }, _sidRollTotalRows());
+}
+function _sidRollDragEnd(d, hit) {
+  const want = d.fresh ? hit.row + 1 : Math.round(hit.rowX);
+  return Math.max(d.note.start + 1, Math.min(d.limit, want));
+}
+// Moving a note in time: the voice's rows are saved when the drag starts, and each step starts from
+// them, so whatever the note passes over comes back behind it. It stops one row short of the next
+// note (shortened there, and its length returns on the way back) and can cut into the previous one.
+function _sidRollMoveStart(notes, n, hit) {
+  const same = notes.filter(function(x) { return x.v === n.v; });
+  const prev = same.filter(function(x) { return x.start < n.start; }).reduce(function(a, x) { return !a || x.start > a.start ? x : a; }, null);
+  const limit = _sidRollNoteLimit(notes, n);
+  const from = prev ? prev.start : 0, rows = [];
+  for (let g = from; g <= limit && g < _sidRollTotalRows(); g++) {
+    const at = _sidRollCell(n.v, g);
+    rows.push(at && at.cell ? Object.assign({}, at.cell) : null);
+  }
+  const first = _sidRollCell(n.v, n.start);
+  return {
+    kind: "move", note: n, limit: limit, grabRow: hit.row, origStart: n.start, length: n.end - n.start, origEnd: n.end,
+    prevEnd: prev ? prev.end : -1, min: prev ? prev.start + 1 : 0, max: limit - 1, from: from, rows: rows,
+    cell: Object.assign({}, first.cell),
+  };
+}
+function _sidRollMoveTo(d, start) {
+  const n = d.note, total = _sidRollTotalRows();
+  d.rows.forEach(function(cell, i) { if (cell) _sidRollWrite(n.v, d.from + i, cell); });
+  _sidRollWrite(n.v, d.origStart, {});
+  const clearOff = function(g) {
+    const at = g < total ? _sidRollCell(n.v, g) : null;
+    if (at && at.cell && at.cell.note == null && at.cell.fx === "C") _sidRollWrite(n.v, g, {});
+  };
+  clearOff(d.origEnd);
+  // the previous note keeps its end: a note-off in place of the note that ended it, none under this one
+  if (d.prevEnd >= 0) {
+    if (d.prevEnd === d.origStart && start > d.origStart) _sidRollWrite(n.v, d.origStart, { fx: "C" });
+    else if (start < d.prevEnd) clearOff(d.prevEnd);
+  }
+  const end = Math.min(start + d.length, d.limit);
+  const target = _sidRollCell(n.v, start);
+  _sidRollWrite(n.v, start, Object.assign({}, d.cell, { fx: d.cell.fx || (target && target.cell && target.cell.fx !== "C" ? target.cell.fx : null), fxval: d.cell.fx ? d.cell.fxval : (target && target.cell && target.cell.fx !== "C" ? target.cell.fxval : 0) }));
+  if (end < total) {
+    const at = _sidRollCell(n.v, end);
+    if (at && at.cell && at.cell.note == null && !at.cell.fx) _sidRollWrite(n.v, end, { fx: "C" });
+  }
+  n.start = start;
+  n.end = end;
+}
 function _sidRollPreview(inst, note) {
   try {
     _sidEnsureAudio();
@@ -1986,6 +2061,11 @@ function _sidRollSetEnd(n, end) {
   if (end < total) {
     const at = _sidRollCell(n.v, end);
     if (at && at.cell && at.cell.note == null && !at.cell.fx) _sidRollWrite(n.v, end, { fx: "C" });
+  }
+  // shortened: the old note-off is not needed any more
+  if (end < n.end && n.end < total) {
+    const old = _sidRollCell(n.v, n.end);
+    if (old && old.cell && old.cell.note == null && old.cell.fx === "C") _sidRollWrite(n.v, n.end, {});
   }
   n.end = end;
 }
@@ -2075,6 +2155,7 @@ function _sidRollDraw() {
   ctx.fillRect(xOf(curRow), g.rulerH, g.colW, g.H - g.rulerH);
   const notes = _sidRollNotes();
   const live = [];
+  const edge = view.drag ? (view.drag.kind === "len" ? view.drag.note : null) : view.edge;
   notes.forEach(function(n) {
     const x0 = Math.max(g.keyW, xOf(n.start)), x1 = Math.min(g.W, xOf(n.end));
     if (x1 <= x0 || n.note < view.lo || n.note >= view.lo + view.span) return;
@@ -2090,6 +2171,10 @@ function _sidRollDraw() {
     ctx.lineWidth = sounding ? 1.5 : 1;
     ctx.strokeRect(x0 + 0.5, y + 0.5, x1 - x0 - 2, h - 1);
     ctx.lineWidth = 1;
+    if (edge && edge.v === n.v && edge.start === n.start) {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x1 - 3, y, 2, h);
+    }
     if (x1 - x0 > 30 && h >= 9) {
       ctx.fillStyle = "#0b1020";
       ctx.font = Math.min(10, Math.floor(h - 1)) + "px monospace";
@@ -2237,10 +2322,10 @@ function _sidSetupRoll() {
     const n = _sidRollNoteAt(notes, hit);
     if (e.button === 2) { if (n) _sidRollDelete(n); return; }
     if (e.button !== 0) return;
-    if (n) {
-      const g = hit.g, xEnd = g.keyW + (n.end - _sidRollView.row0) * g.colW;
-      _sidRollView.drag = { kind: hit.x > xEnd - Math.max(5, g.colW * 0.35) ? "len" : "pitch", note: n };
-      _sidRollView.voice = n.v;
+    const grab = _sidRollGrab(notes, hit);
+    if (grab) {
+      _sidRollView.drag = grab.kind === "move" ? _sidRollMoveStart(notes, grab.note, hit) : { kind: "len", note: grab.note, limit: _sidRollNoteLimit(notes, grab.note) };
+      _sidRollView.voice = grab.note.v;
       _sidRollSyncHeader();
     } else {
       const v = _sidRollView.voice;
@@ -2249,8 +2334,9 @@ function _sidSetupRoll() {
       // the new note ends where the voice's next note (or note-off) already was
       const next = notes.filter(function(x) { return x.v === v && x.start > hit.row; }).sort(function(p, q) { return p.start - q.start; })[0];
       nn.end = next ? next.start : _sidRollTotalRows();
+      const limit = nn.end;
       _sidRollSetEnd(nn, hit.row + 1);
-      _sidRollView.drag = { kind: "len", note: nn, fresh: true };
+      _sidRollView.drag = { kind: "len", note: nn, fresh: true, limit: limit };
       _sidRollPreview(_sidInst, hit.pitch);
     }
     try { cv.setPointerCapture(e.pointerId); } catch (_) {}
@@ -2260,14 +2346,25 @@ function _sidSetupRoll() {
     const hit = _sidRollHit(cv, e);
     _sidRollView.hover = hit;
     const d = _sidRollView.drag;
-    if (!d || !hit) return;
-    if (d.kind === "pitch" && hit.pitch !== d.note.note) {
-      const at = _sidRollCell(d.note.v, d.note.start);
-      _sidRollWrite(d.note.v, d.note.start, Object.assign({}, at.cell, { note: hit.pitch }));
-      d.note.note = hit.pitch;
-      _sidRollPreview(d.note.inst, hit.pitch);
+    if (!d) {
+      const grab = hit && hit.row < _sidRollTotalRows() ? _sidRollGrab(_sidRollNotes(), hit) : null;
+      _sidRollView.edge = grab && grab.kind === "len" ? grab.note : null;
+      cv.style.cursor = grab ? (grab.kind === "len" ? "ew-resize" : "move") : "";
+      return;
+    }
+    if (!hit) return;
+    if (d.kind === "move") {
+      const start = Math.max(d.min, Math.min(d.max, d.origStart + hit.row - d.grabRow));
+      if (hit.pitch !== d.note.note) {
+        d.cell.note = hit.pitch;
+        d.note.note = hit.pitch;
+        const at = _sidRollCell(d.note.v, d.note.start);
+        _sidRollWrite(d.note.v, d.note.start, Object.assign({}, at.cell, { note: hit.pitch }));
+        _sidRollPreview(d.note.inst, hit.pitch);
+      }
+      if (start !== d.note.start) _sidRollMoveTo(d, start);
     } else if (d.kind === "len") {
-      const end = Math.max(d.note.start + 1, hit.row + 1);
+      const end = _sidRollDragEnd(d, hit);
       if (end !== d.note.end) _sidRollSetEnd(d.note, end);
     }
   });
@@ -2277,7 +2374,7 @@ function _sidSetupRoll() {
   };
   cv.addEventListener("pointerup", endDrag);
   cv.addEventListener("pointercancel", endDrag);
-  cv.addEventListener("pointerleave", function() { _sidRollView.hover = null; });
+  cv.addEventListener("pointerleave", function() { _sidRollView.hover = null; _sidRollView.edge = null; });
   // wheel: scroll in time, Shift = pitch, Ctrl = zoom
   cv.addEventListener("wheel", function(e) {
     e.preventDefault();
@@ -2339,6 +2436,15 @@ function _sidEnsureAudio() {
   return _sidAudio;
 }
 
+function _sidPlayerAudio() {
+  if (!_sidExtAudio) {
+    _sidExtAudio = new (window.AudioContext || window.webkitAudioContext)();
+    _sidExtGain = _sidExtAudio.createGain();
+    _sidExtGain.gain.value = _sidMasterVol;
+    _sidExtGain.connect(_sidExtAudio.destination);
+  }
+  return _sidExtAudio;
+}
 // Sets the shared SID volume (0-100) and keeps the SID Editor and the SID
 // player knobs in step; persisted as c64va-sid-master-vol.
 function _sidSetMasterVolume(pct, persist = true) {
@@ -2423,10 +2529,13 @@ function _sidLoadMasterVolume() {
 }
 
 function _sidApplyMasterVolume() {
-  if (_sidMasterGain) {
-    try { _sidMasterGain.gain.setTargetAtTime(_sidMasterVol, _sidMasterGain.context.currentTime, 0.02); }
-    catch(_) { _sidMasterGain.gain.value = _sidMasterVol; }
-  }
+  [_sidMasterGain, _sidExtGain].forEach(function(node) {
+    if (!node) return;
+    // a suspended context's clock stands, so a ramp would wait for the resume
+    if (node.context.state === "suspended") { node.gain.value = _sidMasterVol; return; }
+    try { node.gain.setTargetAtTime(_sidMasterVol, node.context.currentTime, 0.02); }
+    catch(_) { node.gain.value = _sidMasterVol; }
+  });
 }
 /* Note preview: `inst` plays for holdSec, then the gate is released: one engine
    voice with the release tail, on the backend's SID or (no backend) the synth. */
@@ -2551,6 +2660,8 @@ function _sidRecordTick() {
   if (step === rec.lastStep) return;
   rec.lastStep = step;
   rec.row = rec.startRow + step;
+  rec.pendingOff.forEach(function(voice) { _sidRecordPolyOff(rec, voice); });
+  rec.pendingOff.clear();
   _sidSel.voice = rec.voice;
   _sidSel.row = rec.row;
   _sidRefreshSel();
@@ -2568,12 +2679,57 @@ function _sidRecordNote(note) {
   return true;
 }
 
+// Poly record (MIDI): every held key takes a voice of its own, from the selected voice on, and
+// its release writes a note-off, because a voice left alone would ring on. With all voices held
+// the oldest key gives up its voice. A voice with a release due on this row is the last choice,
+// so that a quick melody does not overwrite its own notes.
+const _SID_POLY_CHORD_MS = 40;
+function _sidRecordPolyVoice(rec) {
+  const held = Array.from(rec.held.values(), function(h) { return h.voice; });
+  const order = rec.pattern.map(function(_, i) { return (rec.voice + i) % rec.pattern.length; });
+  const free = order.filter(function(v) { return !held.includes(v); });
+  const ready = free.find(function(v) { return !rec.pendingOff.has(v); });
+  return ready ?? free[0] ?? held[0];
+}
+function _sidRecordPolyNote(note, midiNote) {
+  const rec = _sidRecording;
+  const voice = _sidRecordPolyVoice(rec);
+  rec.held.forEach(function(h, key) { if (h.voice === voice) rec.held.delete(key); });
+  rec.pendingOff.delete(voice);
+  // the keys of a chord may fall on both sides of a row boundary
+  const now = performance.now();
+  const inChord = rec.chord && rec.chord.pattern === rec.pattern && now - rec.chord.at < _SID_POLY_CHORD_MS;
+  if (!inChord) rec.chord = { pattern: rec.pattern, row: rec.row, at: now };
+  const row = rec.chord.row;
+  rec.pattern[voice][row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  _sidSetCellText(voice, row);
+  rec.held.set(midiNote, { voice: voice, pattern: rec.pattern, row: row });
+  _sidEnsureAudio();
+  _sidPlayInst(_sidInsts[rec.inst], _sidNoteFreq(note), _sidAudio.currentTime + 0.01, Math.max(0.08, rec.rowMs / 1000 * 0.9));
+  _sidFlashVirtualKeyboardNotes([note]);
+}
+function _sidRecordPolyOff(rec, voice) {
+  const cell = rec.pattern[voice][rec.row];
+  if (cell && (cell.note != null || cell.fx)) return;
+  rec.pattern[voice][rec.row] = { note: null, inst: 0, fx: "C", fxval: 0 };
+  _sidSetCellText(voice, rec.row);
+}
+function _sidRecordPolyRelease(midiNote) {
+  const rec = _sidRecording;
+  const held = rec && rec.held.get(midiNote);
+  if (!held) return;
+  rec.held.delete(midiNote);
+  // released on its own row: the note-off has to wait for the next one
+  if (held.pattern === rec.pattern && held.row === rec.row) rec.pendingOff.add(held.voice);
+  else _sidRecordPolyOff(rec, held.voice);
+}
 function _sidRecordStart() {
   if (!_sidPatterns) return;
   _sidStop();
   _sidRecording = {
     pattern: _sidCurPat(), voice: _sidSel.voice, inst: _sidInst, startRow: _sidSel.row,
-    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null
+    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null,
+    held: new Map(), pendingOff: new Set(), chord: null
   };
   _sidRecordTick();
   _sidRecording.timer = setInterval(_sidRecordTick, 16);
@@ -2788,7 +2944,7 @@ function _sidExtPlay() {
   if (_sidExtStatus === "paused") {
     if (_sidExternalCore) {
       _sidExternalCore.paused = false;
-      _sidEnsureAudio();
+      _sidPlayerAudio().resume();
     }
     _sidExtSetStatus("playing");
     return;
@@ -2798,10 +2954,11 @@ function _sidExtPlay() {
 }
 
 function _sidExtPause() {
+  if (_sidExtStatus === "paused") { _sidExtPlay(); return; }
   if (_sidExtStatus !== "playing") return;
   if (_sidExternalCore) {
     _sidExternalCore.paused = true;
-    if (_sidAudio) _sidAudio.suspend();
+    if (_sidExtAudio) _sidExtAudio.suspend();
   }
   _sidExtSetStatus("paused");
 }
@@ -3713,18 +3870,24 @@ function _sidVizRowHue(row, rows) {
   return 125 - (row / Math.max(1, rows - 1)) * 100;
 }
 
+function _sidVizTap(gain) {
+  const an = gain.context.createAnalyser();
+  an.fftSize = 2048;
+  an.minDecibels = -90;
+  an.maxDecibels = -25;
+  an.smoothingTimeConstant = 0.55;
+  gain.connect(an);
+  return an;
+}
 function _sidVizAnalysers() {
   const list = [];
   if (_sidAudio && _sidMasterGain) {
-    if (!_sidVizVa) {
-      _sidVizVa = _sidAudio.createAnalyser();
-      _sidVizVa.fftSize = 2048;
-      _sidVizVa.minDecibels = -90;
-      _sidVizVa.maxDecibels = -25;
-      _sidVizVa.smoothingTimeConstant = 0.55;
-      _sidMasterGain.connect(_sidVizVa);
-    }
+    if (!_sidVizVa) _sidVizVa = _sidVizTap(_sidMasterGain);
     list.push(_sidVizVa);
+  }
+  if (_sidExtGain) {
+    if (!_sidVizExt) _sidVizExt = _sidVizTap(_sidExtGain);
+    list.push(_sidVizExt);
   }
   return list;
 }
@@ -4100,7 +4263,7 @@ function _sidExternalCoreStop(keepDialog = false) {
   if (state.timer) clearInterval(state.timer);
   _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
   _sidExtSources.clear();
-  if (state.paused && _sidAudio) _sidAudio.resume();
+  if (state.paused && _sidExtAudio) _sidExtAudio.resume();
   if (!keepDialog) _sidPlayerHideWindow();
   // released at once: a render still in flight finishes on its own session
   // lock, and waiting for it let stale sessions pile up on quick switches
@@ -4113,7 +4276,8 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
     return false;
   }
   _sidStop(true);
-  const ac = _sidEnsureAudio();
+  const ac = _sidPlayerAudio();
+  if (ac.state === "suspended") ac.resume();
   // A renderer hosszú DOM-művelet alatt nem fut. Tíz másodpercnyi már az
   // AudioContext szálán ütemezett hang ezért akkor is folytatódik.
   const aheadTarget = _sidPlayerAheadSeconds(_sidPlayerBufferSize());
@@ -4142,7 +4306,7 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
         state.renderedMs += state.skipMs + samples * 1000 / ac.sampleRate;
         state.skipMs = 0;
         state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
-        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels);
+        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels, _sidExtGain);
         state.nextTime += samples / ac.sampleRate;
         // A Web Audio szál előre ütemezett hangja UI-terhelés alatt is tovább szól.
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < aheadTarget);
@@ -4213,9 +4377,7 @@ function _sidWaTune() {
   return _sidTuneData({ song: playAll ? ((_sidSong && _sidSong.length) ? _sidSong : [0]) : [_sidPat] });
 }
 
-function _sidWaStart(audio) {
-  if (audio) _sidEnsureAudio();
-  const td = _sidWaTune();
+function _sidWaEngine(td, audio) {
   const e = _sidEngineNew(td);
   if (_sidPlayMode === "all") {
     e.opos = Math.max(0, Math.min(td.song.length - 1, _sidSongPlayPos | 0));
@@ -4224,7 +4386,37 @@ function _sidWaStart(audio) {
   // the 6502 player reads row 0 `speed` frames after init; the previews start
   // the engine one frame before row 0 instead
   if (audio) e.tick = 1;
-  _sidWaPlay = { e: e, audio: !!audio, core: !!audio && _sidUsesNativeCore(), sidCoreSession: audio && _sidUsesNativeCore() ? crypto.randomUUID() : null, coreQueue: Promise.resolve(), events: [], next: 0, timer: null };
+  return e;
+}
+// The engine's volume is 0 until the first note, and on reSID that step is a loud click on the
+// first note (the backend settles the chip on the first frame). The registers the first note
+// will set, per chip, from a dry run: the frames before it carry them.
+function _sidWaOpeningMixer(td) {
+  const e = _sidWaEngine(td, true);
+  const open = new Array(e.chips).fill(null);
+  for (let k = 0; k < 6000 && open.includes(null); k++) {
+    _sidEngFrame(e);
+    open.forEach(function(regs, c) {
+      const at = 25 * c;
+      if (!regs && (e.regs[at + 0x18] & 15)) open[c] = Array.from(e.regs.subarray(at + 0x15, at + 0x19));
+    });
+  }
+  return open;
+}
+function _sidWaOpenFrame(w, frame) {
+  w.open.forEach(function(regs, c) {
+    if (!regs) return;
+    const at = 25 * c;
+    if (frame[at + 0x18] & 15) { w.open[c] = null; return; }
+    regs.forEach(function(value, i) { frame[at + 0x15 + i] = value; });
+  });
+  return frame;
+}
+function _sidWaStart(audio) {
+  if (audio) _sidEnsureAudio();
+  const td = _sidWaTune();
+  const e = _sidWaEngine(td, audio);
+  _sidWaPlay = { e: e, audio: !!audio, core: !!audio && _sidUsesNativeCore(), sidCoreSession: audio && _sidUsesNativeCore() ? crypto.randomUUID() : null, coreQueue: Promise.resolve(), events: [], next: 0, timer: null, open: audio && _sidUsesNativeCore() && _sidPreviewEngine === "resid" ? _sidWaOpeningMixer(td) : null };
   _sidWaPlay.next = _sidWaClock(_sidWaPlay) + 0.05;
   _sidWaSchedule();
   _sidWaPlay.timer = setInterval(_sidWaSchedule, 20);
@@ -4249,7 +4441,8 @@ function _sidWaSchedule() {
         const frames = [];
         for (let k = 0; k < chunk; k++) {
           _sidEngFrame(e);
-          frames.push(_sidNativeFrame(e));
+          const frame = _sidNativeFrame(e);
+          frames.push(w.open ? _sidWaOpenFrame(w, frame) : frame);
         }
         const playAt = w.next;
         w.coreQueue = w.coreQueue.then(function() {
@@ -4348,6 +4541,13 @@ function _sidStop(stopExternal = false) {
   const t = document.getElementById("sid-tracker");
   if (t) t.querySelectorAll("tr.sid-playing").forEach(function(r){ r.classList.remove("sid-playing"); });
   _sidUpdatePauseButton();
+  const back = _sidPlayReturn;
+  _sidPlayReturn = null;
+  if (back) {
+    // a song step picked during playback wins
+    const pat = back.songPos === _sidSongPos ? back.pat : _sidSong[_sidSongPos];
+    if (pat !== _sidPat) _sidSetPattern(pat, true);
+  }
   _sidBuildSongList();
   if (typeof _sidLcdIdle === "function") _sidLcdIdle();
 }
@@ -4359,9 +4559,11 @@ async function _sidPlay(resetPosition = true) {
   if (resetPosition) {
     _sidSongPlayPos = 0;
     if (playAll) {
+      if (!_sidPlayReturn) _sidPlayReturn = { pat: _sidPat, songPos: _sidSongPos };
       _sidPlayPat = (_sidSong && _sidSong.length) ? _sidSong[0] : 0;
       _sidSetPattern(_sidPlayPat, true);
     } else {
+      _sidPlayReturn = null;
       _sidPlayPat = _sidPat;
     }
     _sidRow = 0;
@@ -4753,8 +4955,9 @@ function _sidRenderEngine(e, frames, sr, hook) {
 }
 
 // channels: 1, or 2 for interleaved stereo (tunes with several SIDs)
-function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = data.channels || 1) {
-  const ac = _sidEnsureAudio();
+// output: the node to play into, on a context of its own that must not be woken up here
+function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = data.channels || 1, output = null) {
+  const ac = output ? output.context : _sidEnsureAudio();
   const samples = Math.max(1, data.length / channels);
   const buf = ac.createBuffer(channels, samples, ac.sampleRate);
   for (let c = 0; c < channels; c++) {
@@ -4764,7 +4967,7 @@ function _sidPlayBuffer(data, when, sources = _sidPreviewSources, channels = dat
   }
   const src = ac.createBufferSource();
   src.buffer = buf;
-  src.connect(_sidMasterGain || ac.destination);
+  src.connect(output || _sidMasterGain || ac.destination);
   src.start(Math.max(ac.currentTime, when));
   sources.add(src);
   src.onended = function() { sources.delete(src); };
@@ -4952,7 +5155,7 @@ function _sidDeserialize(src) {
   _sidSong = _sidSong.map(function(idx){ return Math.max(0, Math.min(_sidPatterns.length - 1, idx|0)); });
   _sidSongPos = 0;
   _sidSongPlayPos = 0;
-  _sidInst = 0; _sidPat = 0; _sidPlayPat = 0;
+  _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
 }
@@ -5760,7 +5963,7 @@ function _sidApplyImportedTune(res, title) {
   if (speedEl) speedEl.value = String(_sidSpeed);
   if (typeof _sidUpdateBpmDisplay === "function") _sidUpdateBpmDisplay();
   _sidSongPos = 0; _sidSongPlayPos = 0;
-  _sidInst = 0; _sidPat = 0; _sidPlayPat = 0;
+  _sidInst = 0; _sidPat = _sidSong[0] || 0; _sidPlayPat = _sidPat;
   _sidSyncPlayModeSel();
   _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildPatSel(); _sidBuildSongList(); _sidBuildTracker();
 }
@@ -7107,6 +7310,13 @@ function setupSidEditor() {
     _dlgRaisePanel(document.getElementById("sid-virtual-keyboard-dialog"));
   });
   onId("sid-midi-connect", "click", _sidMidiConnect);
+  try { _sidMidiPoly = localStorage.getItem("c64va-sid-midi-poly") === "1"; } catch (_) {}
+  const midiPoly = document.getElementById("sid-midi-poly");
+  if (midiPoly) midiPoly.checked = _sidMidiPoly;
+  onId("sid-midi-poly", "change", function(e) {
+    _sidMidiPoly = !!e.target.checked;
+    try { localStorage.setItem("c64va-sid-midi-poly", _sidMidiPoly ? "1" : "0"); } catch (_) {}
+  });
   onId("sid-midi-input", "change", function(e) { _sidMidiSetInput(e.target.value); });
   onId("sid-vkbd-close", "click", function(){
     _sidCloseVirtualKeyboard();
@@ -7504,6 +7714,7 @@ function _sidApplyTranslations() {
   setAttr("#sid-master-vol", t("sidMasterVolume"));
   setText("#sid-midi-lbl", t("sidMidi"));
   setText("#sid-midi-connect", t("sidMidiConnect"));
+  setText("#sid-midi-poly-label", t("sidMidiPoly"));
   setAttr("#sid-record", t("sidRecord"));
   setAttr("#sid-vkbd-record", t("sidRecord"));
   setText("#sid-preview-engine-lbl", t("sidPreviewEngine"));

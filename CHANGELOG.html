@@ -356,9 +356,22 @@ code {
     });
   </script>
 <h1 id="changelog">Changelog</h1>
+<h2 id="132---2026-11-02">1.3.2 - 2026-11-02</h2>
+<ul>
+<li>Tempo: the tracker's tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.</li>
+<li>Moving notes in the horizontal tracker: drag a note's body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note.</li>
+<li>Note length in the horizontal tracker: a note's right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice's next note, instead of deleting it.</li>
+<li>Connect MIDI: on Windows the web view no longer asks for permission in a dialog of its own.</li>
+<li>Loading a .bin: the tracker opens on the selected first song step; a tune whose song does not start with pattern 0 showed pattern 0 instead.</li>
+<li>SID Player Pause: it pauses every time now (a chunk rendered at that moment, or a note from the SID Editor, could switch the sound back on), and pressing it again continues.</li>
+<li>Stop in Play: All: the tracker returns to the pattern that was open before playback, instead of staying on the last one played.</li>
+<li>Poly record from MIDI: with <strong>Poly record</strong> on, the keys held while recording go to voices of their own, and a release writes a note-off.</li>
+<li>No click on reSID: neither before notes played live, nor on the first note of a tune that does not begin on the first row, with either the 6581 or the 8580.</li>
+</ul>
 <h2 id="131---2026-11-02">1.3.1 - 2026-11-02</h2>
 <ul>
-<li>Linux: no more blank window with <code>Failed to create GBM buffer</code>. The app turns off WebKitGTK's DMA-BUF renderer unless <code>WEBKIT_DISABLE_DMABUF_RENDERER</code> is already set.</li>
+<li>macOS 26: the app icon fills the whole icon shape, with no light frame around it. Building for macOS needs Xcode 26.</li>
+<li>readme: what to do about a blank window on Linux with <code>Failed to create GBM buffer</code>.</li>
 </ul>
 <h2 id="130---2026-11-01">1.3.0 - 2026-11-01</h2>
 <h3 id="sid-engine">SID engine</h3>
