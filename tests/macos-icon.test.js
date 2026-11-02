@@ -30,4 +30,6 @@ test("the installers are built with an Xcode that has Icon Composer support, and
   assert.ok(wf.includes("os: macos-26"));
   assert.ok(wf.includes("VA SID Studio.app/Contents") || wf.includes("VA SID Studio.app"));
   assert.ok(wf.includes("Print :CFBundleIconName"));
+  assert.ok(wf.includes("bundles: app,dmg"), "with dmg alone Tauri deletes the .app the check looks at");
+  assert.ok(!/bundles: dmg\b/.test(wf));
 });
