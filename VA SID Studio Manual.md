@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.3.2**
+**Version 1.3.3**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -269,6 +269,7 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Pat**, **+**, **−** | Selects, adds or deletes a pattern. |
 | **Play** | **All** plays the song, **Pattern** plays the current pattern. |
 | **SID** | 1 or 2 chips: see [Two SIDs](#13-two-sids). |
+| **Quantize**, **On record** | The grid, 2, 4, 8 or 16 rows. In the horizontal tracker, **Q** or its button moves the selected notes to the nearest grid row and keeps their lengths; with **On record** checked, the notes of a recording are quantized the same way when it stops. |
 | **Undo**, **Redo** | Or Ctrl+Z and Ctrl+Y. They step through the changes of the notes, instruments, song and tempo and the loading of a tune, up to 100 steps. A knob's drag or a whole recording is one step, and the view jumps to the instrument and pattern that changed. Text fields keep their own Ctrl+Z. |
 | **Frames/row**, **−**, **+** | 1–255, so a higher number is slower. |
 | **BPM** | Shows the resulting tempo: with 4 rows per beat on PAL, 6 frames/row = 125 BPM. |
@@ -355,6 +356,11 @@ The horizontal tracker draws the whole song as notes over time and lets you edit
 |---|---|
 | Click on an empty place | New note on the active voice with the current instrument; drag to set its length |
 | Drag a note | Moves it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note |
+| **Shift**+drag | Selects the notes a frame touches; **Ctrl**+**Shift**+drag adds them to the selection |
+| **Ctrl**+click a note | Adds it to the selection or takes it out; **Ctrl**+**A** selects all, **Esc** clears |
+| **Ctrl**+**X** / **C** / **V**, **Del** | Cut, copy, paste and delete, also with the buttons in the header. A paste goes to the row under the mouse, or else to the tracker cursor, and writes over what is there |
+| **Q** | Quantizes the selected notes on the grid set in the tracker toolbar |
+| **Undo**, **Redo** in the header | The same as in the tracker toolbar, or Ctrl+Z and Ctrl+Y |
 | Drag a note's right end | Stretches or shortens it, up to the voice's next note. Over the end the cursor is a double arrow and a bright bar marks it, on a one-row note as well |
 | Right-click a note | Deletes it |
 | Mouse wheel | Scrolls in time |

@@ -1903,7 +1903,7 @@ const _SID_ROLL_COLORS = ["#ffb347", "#7c9cff", "#ff6b6b", "#4ade80", "#f7d154",
 
 const _SID_ROLL_VOICE = ["#38d6ff", "#ff5ccf", "#4ade80", "#ffb020", "#a78bfa", "#f87171"];
 
-var _sidRollView = { row0: 0, colW: 14, rowPx: 11, lo: 36, span: 48, voice: 0, raf: 0, drag: null, hover: null, follow: true };
+var _sidRollView = { row0: 0, colW: 14, rowPx: 11, lo: 36, span: 48, voice: 0, raf: 0, drag: null, hover: null, follow: true, sel: new Set(), band: null };
 
 function _sidRollState() {
   try { return JSON.parse(localStorage.getItem("c64va-sid-roll") || "{}") || {}; } catch (_) { return {}; }
@@ -2072,12 +2072,132 @@ function _sidRollSetEnd(n, end) {
   n.end = end;
 }
 
+// The note's own row is cleared, and the note before it on the voice keeps its end: where it rang
+// on into this note, a note-off takes the note's place.
 function _sidRollDelete(n) {
+  const notes = _sidRollNotes();
+  const prev = notes.filter(function(x) { return x.v === n.v && x.start < n.start; })
+    .reduce(function(a, x) { return !a || x.start > a.start ? x : a; }, null);
   _sidRollWrite(n.v, n.start, {});
   const at = n.end < _sidRollTotalRows() ? _sidRollCell(n.v, n.end) : null;
   if (at && at.cell && at.cell.note == null && at.cell.fx === "C") _sidRollWrite(n.v, n.end, {});
+  if (prev && prev.end === n.start) _sidRollWrite(n.v, n.start, { fx: "C" });
 }
-
+// ---- selection, clipboard and quantize of the horizontal tracker ----
+var _sidRollClip = null;
+// the grid in rows, and whether a recording is quantized when it stops; no initializer: the setup
+// sets them before these lines run
+var _sidQuant;
+var _sidQuantRec;
+function _sidRollKey(n) { return n.v + ":" + n.start; }
+function _sidRollSelected(notes) {
+  return notes.filter(function(n) { return _sidRollView.sel.has(_sidRollKey(n)); });
+}
+// Puts notes in like a paste, over what is there: { v, start, len, cell }, len null = rings on.
+// Returns the keys of the notes placed.
+function _sidRollPlace(items) {
+  const total = _sidRollTotalRows(), voices = _sidVoiceCount(), keys = [];
+  items.filter(function(it) { return it.v < voices && it.start >= 0 && it.start < total; })
+    .sort(function(a, b) { return a.start - b.start; })
+    .forEach(function(it) {
+      const end = it.len == null ? it.start + 1 : Math.min(total, it.start + Math.max(1, it.len));
+      // a note it cuts short loses the note-off that ended it further on
+      const cut = _sidRollNotes().find(function(n) { return n.v === it.v && n.start < it.start && n.end > end; });
+      if (cut && cut.end < total) {
+        const off = _sidRollCell(it.v, cut.end);
+        if (off && off.cell && off.cell.note == null && off.cell.fx === "C") _sidRollWrite(it.v, cut.end, {});
+      }
+      for (let g = it.start + 1; g < end; g++) {
+        const at = _sidRollCell(it.v, g);
+        if (at && at.cell && (at.cell.note != null || at.cell.fx === "C")) _sidRollWrite(it.v, g, {});
+      }
+      _sidRollWrite(it.v, it.start, Object.assign({}, it.cell));
+      if (it.len != null && end < total) {
+        const at = _sidRollCell(it.v, end);
+        if (at && at.cell && at.cell.note == null && !at.cell.fx) _sidRollWrite(it.v, end, { fx: "C" });
+      }
+      keys.push(it.v + ":" + it.start);
+    });
+  return keys;
+}
+function _sidRollItem(n, start) {
+  const at = _sidRollCell(n.v, n.start);
+  return { v: n.v, start: start, len: n.end >= _sidRollTotalRows() ? null : n.end - n.start, cell: Object.assign({}, at.cell) };
+}
+function _sidRollCopySelected() {
+  const sel = _sidRollSelected(_sidRollNotes());
+  if (!sel.length) return 0;
+  const first = Math.min.apply(null, sel.map(function(n) { return n.start; }));
+  _sidRollClip = sel.map(function(n) { return _sidRollItem(n, n.start - first); });
+  return sel.length;
+}
+function _sidRollDeleteSelected() {
+  const sel = _sidRollSelected(_sidRollNotes()).sort(function(a, b) { return b.start - a.start; });
+  // one by one, each against the notes as they are by then
+  sel.forEach(function(n) {
+    const now = _sidRollNotes().find(function(x) { return x.v === n.v && x.start === n.start; });
+    if (now) _sidRollDelete(now);
+  });
+  _sidRollView.sel.clear();
+  return sel.length;
+}
+function _sidRollCutSelected() {
+  return _sidRollCopySelected() ? _sidRollDeleteSelected() : 0;
+}
+function _sidRollPasteAt(row) {
+  if (!_sidRollClip || !_sidRollClip.length) return 0;
+  const keys = _sidRollPlace(_sidRollClip.map(function(c) { return Object.assign({}, c, { start: row + c.start }); }));
+  _sidRollView.sel = new Set(keys);
+  return keys.length;
+}
+// Each note's start to the nearest multiple of grid rows, its length kept. Returns the keys after.
+function _sidRollQuantizeNotes(notes, grid) {
+  const total = _sidRollTotalRows();
+  const keys = [], moving = [];
+  notes.forEach(function(n) {
+    const start = Math.max(0, Math.min(total - 1, Math.round(n.start / grid) * grid));
+    if (start === n.start) keys.push(_sidRollKey(n));
+    else moving.push({ n: n, item: _sidRollItem(n, start) });
+  });
+  moving.slice().sort(function(a, b) { return b.n.start - a.n.start; }).forEach(function(m) {
+    const now = _sidRollNotes().find(function(x) { return x.v === m.n.v && x.start === m.n.start; });
+    if (now) _sidRollDelete(now);
+  });
+  return keys.concat(_sidRollPlace(moving.map(function(m) { return m.item; })));
+}
+function _sidRollQuantizeSelected() {
+  const grid = _sidQuant || 4;
+  const sel = _sidRollSelected(_sidRollNotes());
+  if (grid < 2 || !sel.length) return 0;
+  _sidRollView.sel = new Set(_sidRollQuantizeNotes(sel, grid));
+  return sel.length;
+}
+// The notes of a take, when it stops: their rows in the song, then quantized.
+function _sidRecordQuantize(rec, grid) {
+  if (grid < 2 || !rec.taken || !rec.taken.length) return 0;
+  const want = new Set(rec.taken.map(function(t) {
+    const idx = _sidPatterns.indexOf(t.pattern);
+    let pos = _sidSong.indexOf(idx, rec.songPos0 || 0);
+    if (pos < 0) pos = _sidSong.indexOf(idx);
+    return pos < 0 ? "" : t.voice + ":" + (pos * _SID_ROWS + t.row);
+  }));
+  const notes = _sidRollNotes().filter(function(n) { return want.has(_sidRollKey(n)); });
+  _sidRollQuantizeNotes(notes, grid);
+  return notes.length;
+}
+function _sidRollPasteRow() {
+  const hv = _sidRollView.hover;
+  return hv && hv.row < _sidRollTotalRows() ? hv.row : _sidSongPos * _SID_ROWS + _sidSel.row;
+}
+function _sidRollSyncTools() {
+  const has = _sidRollView.sel.size > 0;
+  [["sid-roll-cut", has], ["sid-roll-copy", has], ["sid-roll-delete", has], ["sid-roll-paste", !!(_sidRollClip && _sidRollClip.length)], ["sid-roll-quantize", has]]
+    .forEach(function(p) { const el = document.getElementById(p[0]); if (el) el.disabled = !p[1]; });
+}
+function _sidRollAfterEdit() {
+  _sidRollSyncTools();
+  if (typeof _sidHistSchedule === "function") _sidHistSchedule();
+}
 function _sidRollPlayRow() {
   const playing = !!(_sidTimer || _sidWaPlay);
   if (!playing) return null;
@@ -2177,6 +2297,13 @@ function _sidRollDraw() {
       ctx.fillStyle = "#fff";
       ctx.fillRect(x1 - 3, y, 2, h);
     }
+    if (view.sel.has(_sidRollKey(n))) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x0 + 1, y + 1, x1 - x0 - 3, h - 2);
+      ctx.lineWidth = 1;
+    }
     if (x1 - x0 > 30 && h >= 9) {
       ctx.fillStyle = "#0b1020";
       ctx.font = Math.min(10, Math.floor(h - 1)) + "px monospace";
@@ -2184,6 +2311,17 @@ function _sidRollDraw() {
     }
     ctx.globalAlpha = 1;
   });
+  if (view.band) {
+    const b = view.band;
+    const rx0 = xOf(Math.min(b.r0, b.r1)), rx1 = xOf(Math.max(b.r0, b.r1));
+    const ry0 = yOf(Math.max(b.p0, b.p1)), ry1 = yOf(Math.min(b.p0, b.p1)) + g.rowH;
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.strokeRect(rx0 + 0.5, ry0 + 0.5, rx1 - rx0, ry1 - ry0);
+    ctx.setLineDash([]);
+  }
   // hover cell on the active voice
   const hv = view.hover;
   if (hv && !view.drag && hv.pitch >= view.lo && hv.pitch < view.lo + view.span && hv.row < total) {
@@ -2322,8 +2460,29 @@ function _sidSetupRoll() {
     if (!hit || hit.row >= _sidRollTotalRows()) return;
     const notes = _sidRollNotes();
     const n = _sidRollNoteAt(notes, hit);
-    if (e.button === 2) { if (n) _sidRollDelete(n); return; }
+    cv.focus({ preventScroll: true });
+    if (e.button === 2) {
+      if (n) { _sidRollView.sel.delete(_sidRollKey(n)); _sidRollDelete(n); _sidRollAfterEdit(); }
+      return;
+    }
     if (e.button !== 0) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && n) {
+      const key = _sidRollKey(n);
+      if (_sidRollView.sel.has(key)) _sidRollView.sel.delete(key); else _sidRollView.sel.add(key);
+      _sidRollSyncTools();
+      e.preventDefault();
+      return;
+    }
+    if (e.shiftKey) {
+      // a frame: it selects every note it touches, Ctrl+Shift adds to the selection
+      _sidRollView.band = { r0: hit.rowX, p0: hit.pitch, r1: hit.rowX, p1: hit.pitch, add: mod };
+      try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+      return;
+    }
+    _sidRollView.sel.clear();
+    _sidRollSyncTools();
     const grab = _sidRollGrab(notes, hit);
     if (grab) {
       _sidRollView.drag = grab.kind === "move" ? _sidRollMoveStart(notes, grab.note, hit) : { kind: "len", note: grab.note, limit: _sidRollNoteLimit(notes, grab.note) };
@@ -2347,6 +2506,10 @@ function _sidSetupRoll() {
   cv.addEventListener("pointermove", function(e) {
     const hit = _sidRollHit(cv, e);
     _sidRollView.hover = hit;
+    if (_sidRollView.band) {
+      if (hit) { _sidRollView.band.r1 = hit.rowX; _sidRollView.band.p1 = hit.pitch; }
+      return;
+    }
     const d = _sidRollView.drag;
     if (!d) {
       const grab = hit && hit.row < _sidRollTotalRows() ? _sidRollGrab(_sidRollNotes(), hit) : null;
@@ -2371,12 +2534,53 @@ function _sidSetupRoll() {
     }
   });
   const endDrag = function(e) {
+    const b = _sidRollView.band;
+    if (b) {
+      _sidRollView.band = null;
+      const r0 = Math.min(b.r0, b.r1), r1 = Math.max(b.r0, b.r1), p0 = Math.min(b.p0, b.p1), p1 = Math.max(b.p0, b.p1);
+      if (!b.add) _sidRollView.sel.clear();
+      _sidRollNotes().forEach(function(n) {
+        if (n.start <= r1 && n.end > r0 && n.note >= p0 && n.note <= p1) _sidRollView.sel.add(_sidRollKey(n));
+      });
+      _sidRollSyncTools();
+    }
     _sidRollView.drag = null;
     if (e && e.pointerId != null) { try { cv.releasePointerCapture(e.pointerId); } catch (_) {} }
   };
   cv.addEventListener("pointerup", endDrag);
   cv.addEventListener("pointercancel", endDrag);
   cv.addEventListener("pointerleave", function() { _sidRollView.hover = null; _sidRollView.edge = null; });
+  cv.tabIndex = 0;
+  const rollCommand = function(what) {
+    if (what === "cut") _sidRollCutSelected();
+    else if (what === "copy") _sidRollCopySelected();
+    else if (what === "paste") _sidRollPasteAt(_sidRollPasteRow());
+    else if (what === "delete") _sidRollDeleteSelected();
+    else if (what === "quantize") _sidRollQuantizeSelected();
+    _sidRollAfterEdit();
+  };
+  ["cut", "copy", "paste", "delete", "quantize"].forEach(function(what) {
+    document.getElementById("sid-roll-" + what)?.addEventListener("click", function() { rollCommand(what); });
+  });
+  cv.addEventListener("keydown", function(e) {
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    let what = null;
+    if (mod && k === "x") what = "cut";
+    else if (mod && k === "c") what = "copy";
+    else if (mod && k === "v") what = "paste";
+    else if (!mod && (e.key === "Delete" || e.key === "Backspace")) what = "delete";
+    else if (!mod && k === "q") what = "quantize";
+    else if (mod && k === "a") {
+      _sidRollView.sel = new Set(_sidRollNotes().map(_sidRollKey));
+      _sidRollSyncTools();
+    } else if (e.key === "Escape" && _sidRollView.sel.size) {
+      _sidRollView.sel.clear();
+      _sidRollSyncTools();
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (what) rollCommand(what);
+  });
   // wheel: scroll in time, Shift = pitch, Ctrl = zoom
   cv.addEventListener("wheel", function(e) {
     e.preventDefault();
@@ -2418,6 +2622,8 @@ function _sidHistRender() {
   const set = function(id, on) { const el = document.getElementById(id); if (el) el.disabled = !on; };
   set("sid-undo", _sidHist.undo.length > 0);
   set("sid-redo", _sidHist.redo.length > 0);
+  set("sid-roll-undo", _sidHist.undo.length > 0);
+  set("sid-roll-redo", _sidHist.redo.length > 0);
 }
 function _sidHistCheck() {
   clearTimeout(_sidHist.timer);
@@ -2754,6 +2960,7 @@ function _sidRecordNote(note) {
   const rec = _sidRecording;
   if (!rec) return false;
   rec.pattern[rec.voice][rec.row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  if (rec.taken) rec.taken.push({ pattern: rec.pattern, row: rec.row, voice: rec.voice });
   _sidSetCellText(rec.voice, rec.row);
   _sidEnsureAudio();
   _sidPlayInst(_sidInsts[rec.inst], _sidNoteFreq(note), _sidAudio.currentTime + 0.01, Math.max(0.08, rec.rowMs / 1000 * 0.9));
@@ -2784,6 +2991,7 @@ function _sidRecordPolyNote(note, midiNote) {
   if (!inChord) rec.chord = { pattern: rec.pattern, row: rec.row, at: now };
   const row = rec.chord.row;
   rec.pattern[voice][row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  if (rec.taken) rec.taken.push({ pattern: rec.pattern, row: row, voice: voice });
   _sidSetCellText(voice, row);
   rec.held.set(midiNote, { voice: voice, pattern: rec.pattern, row: row });
   _sidEnsureAudio();
@@ -2811,7 +3019,7 @@ function _sidRecordStart() {
   _sidRecording = {
     pattern: _sidCurPat(), voice: _sidSel.voice, inst: _sidInst, startRow: _sidSel.row,
     row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null,
-    held: new Map(), pendingOff: new Set(), chord: null
+    held: new Map(), pendingOff: new Set(), chord: null, taken: [], songPos0: _sidSongPos
   };
   _sidRecordTick();
   _sidRecording.timer = setInterval(_sidRecordTick, 16);
@@ -2823,6 +3031,7 @@ function _sidRecordStop() {
   if (!rec) return;
   if (rec.timer) clearInterval(rec.timer);
   _sidRecording = null;
+  if (_sidRecordQuantize(rec, _sidQuantRec ? (_sidQuant || 4) : 0)) _sidBuildTracker();
   _sidRecordRender();
   if (typeof _sidHistSchedule === "function") _sidHistSchedule();
 }
@@ -7547,9 +7756,30 @@ function setupSidEditor() {
     if (k === "-" || k === "/" || e.key === "PageDown") { _sidSetOctave(_sidOctave-1); e.preventDefault(); }
   });
 
+  _sidQuant = 4;
+  _sidQuantRec = false;
+  try {
+    const grid = Number(localStorage.getItem("c64va-sid-quantize"));
+    if ([2, 4, 8, 16].includes(grid)) _sidQuant = grid;
+    _sidQuantRec = localStorage.getItem("c64va-sid-quantize-rec") === "1";
+  } catch (_) {}
+  const quantSel = document.getElementById("sid-quantize");
+  if (quantSel) quantSel.value = String(_sidQuant);
+  const quantRec = document.getElementById("sid-quantize-rec");
+  if (quantRec) quantRec.checked = _sidQuantRec;
+  onId("sid-quantize", "change", function(e) {
+    _sidQuant = Number(e.target.value) || 4;
+    try { localStorage.setItem("c64va-sid-quantize", String(_sidQuant)); } catch (_) {}
+  });
+  onId("sid-quantize-rec", "change", function(e) {
+    _sidQuantRec = !!e.target.checked;
+    try { localStorage.setItem("c64va-sid-quantize-rec", _sidQuantRec ? "1" : "0"); } catch (_) {}
+  });
   // Undo / redo. Text fields keep their own Ctrl+Z.
   onId("sid-undo", "click", _sidUndo);
   onId("sid-redo", "click", _sidRedo);
+  onId("sid-roll-undo", "click", _sidUndo);
+  onId("sid-roll-redo", "click", _sidRedo);
   ["pointerup", "keyup", "change", "input", "wheel"].forEach(function(type) {
     window.addEventListener(type, _sidHistSchedule, { capture: true, passive: true });
   });
@@ -8015,6 +8245,16 @@ function _sidApplyTranslations() {
   setAttr("#sid-midi-input", t("sidMidiInputAria"));
   setAttr("#sid-bpm", t("sidBpmTip"));
   setAttr("#sid-undo", t("sidUndo"));
+  setAttr("#sid-roll-undo", t("sidUndo"));
+  setAttr("#sid-roll-redo", t("sidRedo"));
+  setText("#sid-quantize-lbl", t("sidQuantize"));
+  setAttr("#sid-quantize", t("sidQuantizeTip"));
+  Array.from(document.getElementById("sid-quantize")?.options || []).forEach(function(o) {
+    o.textContent = tf("sidQuantizeRows", { n: o.value });
+  });
+  setText("#sid-quantize-rec-label", t("sidQuantizeRec"));
+  [["#sid-roll-cut", "sidRollCut"], ["#sid-roll-copy", "sidRollCopy"], ["#sid-roll-paste", "sidRollPaste"], ["#sid-roll-delete", "sidRollDelete"], ["#sid-roll-quantize", "sidRollQuantize"]]
+    .forEach(function(p) { setAttr(p[0], t(p[1])); });
   setAttr("#sid-redo", t("sidRedo"));
   ["#sid-metronome", "#sid-roll-metronome", "#sid-vkbd-metronome"].forEach(sel => setAttr(sel, t("sidMetronome")));
   setAttr("#sid-roll .sid-roll-voices", t("sidRollVoice"));

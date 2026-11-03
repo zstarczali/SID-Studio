@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.3 - 2026-11-03
+
+- Horizontal tracker: select notes with a frame (Shift+drag) or Ctrl+click, then cut, copy, paste or delete them with the new header buttons or Ctrl+X / C / V and Del. A paste goes to the row under the mouse, or to the tracker cursor.
+- Quantize: Q or the new button moves the selected notes to the nearest row of the grid (2, 4, 8 or 16 rows, in the tracker toolbar), keeping their lengths. With On record checked, a recording is quantized when it stops.
+- Undo and Redo in the horizontal tracker's header too.
+- Deleting a note keeps the end of the note before it, and a paste over a longer note leaves no stray note-off.
+
 ## 1.3.2 - 2026-11-02
 
 - Linux: the SID Player and the SID Editor stayed silent where the GStreamer plugins were missing. The AppImage now carries them, and the `.deb` and `.rpm` packages depend on them.
