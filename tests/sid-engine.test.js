@@ -56,7 +56,7 @@ test("the engine's name follows the setting, and the backend gets it", async () 
     _sidDecodePcm16: () => new Float32Array(4),
   };
   vm.createContext(ctx);
-  vm.runInContext(`${fnSource("_sidEngineLabel")}; ${fnSource("_sidRenderNativeFrames")};`, ctx);
+  vm.runInContext(`${fnSource("_sidIsNtsc")}; ${fnSource("_sidEngineLabel")}; ${fnSource("_sidRenderNativeFrames")};`, ctx);
   await vm.runInContext(`_sidRenderNativeFrames([new Array(26).fill(0)], 44100)`, ctx);
   assert.equal(payloads[0].engine, "resid");
   assert.equal(vm.runInContext("_sidEngineLabel()", ctx), "reSID (MOS 6581)");

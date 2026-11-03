@@ -144,7 +144,7 @@ Press **Esc** or × to close the editor. This stops playback and saves the tune 
 
 ## 6. Instruments
 
-Each instrument holds a full sound setting. The list holds them in order, and the number in the list is the one you see in the tracker, in hexadecimal. **+** adds an instrument, the field next to it names the current one. **Preview** plays it as an A-4 note.
+Each instrument holds a full sound setting. The list holds them in order, and the number in the list is the one you see in the tracker, in hexadecimal. **+** adds an instrument and **−** deletes the current one: the notes that play it switch to the instrument before it, after a question, and the later numbers move down. Files → **Delete unused instruments** removes every instrument no note plays. The field next to them names the current one. **Preview** plays it as an A-4 note.
 
 Most values are set with knobs: drag them, or use the mouse wheel or the arrow keys.
 
@@ -172,9 +172,9 @@ Sustain is also the effective volume of a single voice, because the SID has no p
 | **End, Sweep** | Moves the cutoff from Cut toward End, by Sweep (0–127) every frame. |
 | **Ping-pong** | Makes the sweep bounce between Cut and End. |
 | **Res** | Resonance, 0–15. |
-| **Vol** | Chip volume, 0–15. |
+| **Vol**, **Song** | The chip's volume, 0–15. With **Song** checked (new instruments have it on), the instrument leaves the chip on the tune's volume and Vol is greyed out. |
 
-The SID has one filter and one volume per chip, so these are shared. The voice that starts a filter-routed instrument sets the filter, and the last note started sets the volume.
+The SID has one filter and one volume per chip, so these are shared. The voice that starts a filter-routed instrument sets the filter. The volume is the tune's (**Vol** in the tracker toolbar), unless an instrument without **Song** sets it: then the last such note started sets it. Tunes saved before 1.3.3 work that way.
 
 ### Vibrato
 
@@ -272,7 +272,9 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Quantize**, **On record** | The grid, 2, 4, 8 or 16 rows. In the horizontal tracker, **Q** or its button moves the selected notes to the nearest grid row and keeps their lengths; with **On record** checked, the notes of a recording are quantized the same way when it stops. |
 | **Undo**, **Redo** | Or Ctrl+Z and Ctrl+Y. They step through the changes of the notes, instruments, song and tempo and the loading of a tune, up to 100 steps. A knob's drag or a whole recording is one step, and the view jumps to the instrument and pattern that changed. Text fields keep their own Ctrl+Z. |
 | **Frames/row**, **−**, **+** | 1–255, so a higher number is slower. |
-| **BPM** | Shows the resulting tempo: with 4 rows per beat on PAL, 6 frames/row = 125 BPM. |
+| **PAL / NTSC** | The machine the tune is for. NTSC runs 60 frames a second on the NTSC clock: the preview, the BPM, the exported player's note table and the `.sid` header follow it. |
+| **Vol** | The tune's volume, 0–15: the chip starts on it, and instruments with **Song** checked keep it. |
+| **BPM** | Shows the resulting tempo, with 4 rows per beat: 6 frames/row = 125 BPM on PAL, 150 on NTSC. |
 | **Oct**, **−**, **+** | Octave for note entry. |
 | **Preview row** | Plays the selected row on all voices. |
 | **Copy, Paste, Clear** | Work on the selection. |
@@ -425,6 +427,7 @@ MIDI depends on the web view of your system. Where it is not available, the app 
 | **New tune** | Starts an empty tune, after asking first. |
 | **Load .bin…** | Opens a tune saved by the editor, including older versions of the format. |
 | **Save .bin…** | Saves the tune in the editor's own format, with everything in it. |
+| **Delete unused instruments** | Removes every instrument no note plays, and renumbers the rest. |
 | **Import GoatTracker .sng…** | Replaces the current tune with a GoatTracker 2 song. |
 | **Import .sid…** | Turns a PSID / RSID file into an editable tune in place of the current one. |
 | **Export asm** | Copies the complete 6502 source to the clipboard. |
@@ -504,10 +507,8 @@ The tune in the editor always stays whole.
 
 ## 17. Known limits
 
-- **Instruments cannot be deleted** one by one. Unused instruments remain in the list and in exports.
-- **No undo** in the SID Editor. Save a copy before large changes.
-- **Volume is per chip**, as on the SID. The instrument's **Vol** sets the chip's volume; use sustain for the level of one voice.
-- **PAL timing:** the exported player and the BPM display assume 50 Hz.
+- **One volume per chip**, as on the SID: there is no volume for one voice. Use sustain for the level of one voice.
+- **The UltimateBasic export is PAL:** the UltimateBasic player has its own PAL note table and plays at 50 Hz.
 - **Copy and paste keys:** **Ctrl+C** and **Ctrl+V** are Ctrl on macOS too. Cmd does not work in the grid; the buttons and the right-click menu do.
 
 ---
