@@ -172,9 +172,8 @@ Sustain is also the effective volume of a single voice, because the SID has no p
 | **End, Sweep** | Moves the cutoff from Cut toward End, by Sweep (0–127) every frame. |
 | **Ping-pong** | Makes the sweep bounce between Cut and End. |
 | **Res** | Resonance, 0–15. |
-| **Vol**, **Song** | The chip's volume, 0–15. With **Song** checked (new instruments have it on), the instrument leaves the chip on the tune's volume and Vol is greyed out. |
 
-The SID has one filter and one volume per chip, so these are shared. The voice that starts a filter-routed instrument sets the filter. The volume is the tune's (**Vol** in the tracker toolbar), unless an instrument without **Song** sets it: then the last such note started sets it. Tunes saved before 1.3.3 work that way.
+The SID has one filter per chip, so it is shared: the voice that starts a filter-routed instrument sets it. The volume is the tune's, set by **Vol** in the tracker toolbar; an instrument has no volume of its own (use sustain for the level of one voice). Tunes saved before 1.3.3 take the first instrument's volume as the tune's.
 
 ### Vibrato
 
@@ -273,7 +272,7 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Undo**, **Redo** | Or Ctrl+Z and Ctrl+Y. They step through the changes of the notes, instruments, song and tempo and the loading of a tune, up to 100 steps. A knob's drag or a whole recording is one step, and the view jumps to the instrument and pattern that changed. Text fields keep their own Ctrl+Z. |
 | **Frames/row**, **−**, **+** | 1–255, so a higher number is slower. |
 | **PAL / NTSC** | The machine the tune is for. NTSC runs 60 frames a second on the NTSC clock: the preview, the BPM, the exported player's note table and the `.sid` header follow it. |
-| **Vol** | The tune's volume, 0–15: the chip starts on it, and instruments with **Song** checked keep it. |
+| **Vol** (**SID 1**, **SID 2**) | The tune's volume, 0–15: the SID's master volume, for all three voices together. A two-SID tune has a knob for each chip. |
 | **BPM** | Shows the resulting tempo, with 4 rows per beat: 6 frames/row = 125 BPM on PAL, 150 on NTSC. |
 | **Oct**, **−**, **+** | Octave for note entry. |
 | **Preview row** | Plays the selected row on all voices. |

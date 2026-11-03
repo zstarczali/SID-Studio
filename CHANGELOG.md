@@ -7,7 +7,7 @@
 - Undo and Redo in the horizontal tracker's header too.
 - Deleting a note keeps the end of the note before it, and a paste over a longer note leaves no stray note-off.
 - Delete instruments: − next to + deletes the current instrument (its notes play the one before it, after a question), and Files → Delete unused instruments removes the ones no note plays. The tracker's numbers follow.
-- Song volume: Vol in the tracker toolbar is the tune's volume. An instrument with Song checked leaves the chip on it, so instruments no longer override each other's volume; new instruments have it on, and older tunes keep setting it from their instruments.
+- Song volume: Vol, a knob in the tracker toolbar, is the tune's volume; a two-SID tune has one for each chip (SID 1, SID 2). Instruments no longer have a volume of their own, so they cannot override each other's any more; a tune saved earlier takes its first instrument's volume.
 - PAL / NTSC: a switch next to BPM. NTSC runs 60 frames a second on the NTSC clock: the preview, the BPM, the exported player's note table and the .sid header follow it.
 
 ## 1.3.2 - 2026-11-02
