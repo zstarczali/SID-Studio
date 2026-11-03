@@ -488,7 +488,7 @@ const _SID_DCR = [6,24,48,72,114,168,204,240,300,750,1500,2400,3000,9000,15000,2
 
 function _sidNewInst(name) {
   return { name: name || t("sidNewInstrumentName"), tri:false, saw:false, pul:true, noi:false, ring:false, sync:false,
-           pw:2048, a:2, d:8, s:6, r:4, lp:false, bp:false, hp:false, cut:1400, res:0, vol:15,
+           pw:2048, a:2, d:8, s:6, r:4, lp:false, bp:false, hp:false, cut:1400, res:0, vol:15, songVol:true,
            // filter: route this voice, voice 3 off, cutoff sweep toward cutEnd (cutSpeed/frame, 0 = static)
            filt:false, off3:false, cutEnd:1400, cutSpeed:0, cutPing:false,
            // instrument vibrato (LFO) and pulse width modulation, both per frame
@@ -511,8 +511,10 @@ function _sidInstNorm(ins) {
   }
   if (src.filt === undefined) o.filt = !!(o.lp || o.bp || o.hp);
   if (src.cutEnd === undefined) o.cutEnd = o.cut;
+  // instruments from before the song volume set the chip's volume themselves
+  if (src.songVol === undefined) o.songVol = false;
   const cl = function(v, lo, hi) { v = Number(v) | 0; return v < lo ? lo : v > hi ? hi : v; };
-  ["tri","saw","pul","noi","ring","sync","lp","bp","hp","filt","off3","cutPing","hr"].forEach(function(k){ o[k] = !!o[k]; });
+  ["tri","saw","pul","noi","ring","sync","lp","bp","hp","filt","off3","cutPing","hr","songVol"].forEach(function(k){ o[k] = !!o[k]; });
   o.pw = cl(o.pw, 0, 4095); o.a = cl(o.a, 0, 15); o.d = cl(o.d, 0, 15); o.s = cl(o.s, 0, 15); o.r = cl(o.r, 0, 15);
   o.cut = cl(o.cut, 0, 2047); o.cutEnd = cl(o.cutEnd, 0, 2047); o.cutSpeed = cl(o.cutSpeed, 0, 127);
   o.res = cl(o.res, 0, 15); o.vol = cl(o.vol, 0, 15);
@@ -679,6 +681,18 @@ function _sidNoteName(n) {
 }
 
 function _sidNoteFreq(n) { return 440 * Math.pow(2, (n - 57) / 12); }
+
+// The tune's volume (0-15) and timing (NTSC = 60 Hz frames, the NTSC clock). No initializer:
+// setupSidEditor runs before these lines; undefined reads as the default.
+var _sidSongVol;
+var _sidSongVol2;
+var _sidNtsc;
+function _sidVol() { return typeof _sidSongVol === "number" ? _sidSongVol : 15; }
+// the second SID's volume (two-SID tunes); unset = the first one's
+function _sidVol2() { return typeof _sidSongVol2 === "number" ? _sidSongVol2 : _sidVol(); }
+function _sidIsNtsc() { return typeof _sidNtsc !== "undefined" && !!_sidNtsc; }
+function _sidFps() { return _sidIsNtsc() ? 60 : 50; }
+function _sidClockHz() { return _sidIsNtsc() ? 1022730 : 985248; }
 
 // n: 0 = C-0
 function _sidMidiRefreshInputs() {
@@ -1085,7 +1099,7 @@ function _sidPreviewArpeggio() {
   if (_sidUsesNativeCore()) {
     const td = _sidTuneData({ insts: [_sidCurInst()], patterns: [], song: [0], speed: 255 });
     const engine = _sidEngineNew(td);
-    const stepFrames = Math.round(stepDur * 50);
+    const stepFrames = Math.round(stepDur * _sidFps());
     const tail = Math.min(150, Math.ceil(_SID_DCR[td.insts[0].r] / 20) + 6);
     // Egyetlen voice és puffer: az IPC késése nem tolhatja egymásra a hangokat.
     _sidRenderNative(engine, length * stepFrames + tail, _sidAudio.sampleRate, function(eng, frame) {
@@ -1148,7 +1162,7 @@ function _sidInstFields() { return [
   ["sid-filt", "filt", "check"], ["sid-lp", "lp", "check"], ["sid-bp", "bp", "check"], ["sid-hp", "hp", "check"], ["sid-off3", "off3", "check"],
   ["sid-cut", "cut", "range", "sid-cut-val"], ["sid-cut-end", "cutEnd", "range", "sid-cut-end-val"],
   ["sid-cut-speed", "cutSpeed", "range", "sid-cut-speed-val"], ["sid-cut-ping", "cutPing", "check"],
-  ["sid-res", "res", "range", "sid-res-val"], ["sid-vol", "vol", "range", "sid-vol-val"],
+  ["sid-res", "res", "range", "sid-res-val"],
   ["sid-vib-delay", "vibDelay", "range", "sid-vib-delay-val"], ["sid-vib-speed", "vibSpeed", "range", "sid-vib-speed-val"],
   ["sid-vib-depth", "vibDepth", "range", "sid-vib-depth-val"],
   ["sid-pwm-speed", "pwmSpeed", "range", "sid-pwm-speed-val"], ["sid-pwm-min", "pwmMin", "range", "sid-pwm-min-val"],
@@ -1168,34 +1182,40 @@ function _sidParamKnobSync(input) {
 
 function _sidInitParamKnobs() {
   _sidInstFields().forEach(function(field) {
-    if (field[2] !== "range") return;
-    const input = document.getElementById(field[0]);
-    if (!input || document.getElementById(input.id + "-knob")) return;
-    const knob = document.createElement("div");
-    knob.id = input.id + "-knob";
-    knob.className = "websid-play-knob sid-param-knob";
-    knob.tabIndex = 0;
-    knob.setAttribute("role", "slider");
-    knob.setAttribute("aria-label", input.closest(".sid-slider-row")?.querySelector(".sid-sl-lbl")?.textContent || input.closest(".sid-wave-row")?.querySelector(".sid-mini-lbl")?.textContent || input.id);
-    knob.setAttribute("aria-valuemin", input.min);
-    knob.setAttribute("aria-valuemax", input.max);
-    knob.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path class="websid-play-knob-track" d=""/><path class="websid-play-knob-value" d=""/><circle class="websid-play-knob-body" cx="20" cy="20" r="11.5"/><line class="websid-play-knob-pointer" x1="20" y1="20" x2="20" y2="11"/></svg>';
-    input.classList.add("sid-range--knob-source");
-    input.after(knob);
-    const set = function(pct) {
-      const min = Number(input.min) || 0;
-      const max = Number(input.max) || 100;
-      input.value = String(Math.round(min + Math.max(0, Math.min(100, pct)) * (max - min) / 100));
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      _sidParamKnobSync(input);
-    };
-    _sidKnobBind(knob, function() {
-      const min = Number(input.min) || 0;
-      const max = Number(input.max) || 100;
-      return (Number(input.value) - min) * 100 / Math.max(1, max - min);
-    }, set);
-    _sidParamKnobSync(input);
+    if (field[2] === "range") _sidMakeParamKnob(document.getElementById(field[0]));
   });
+  // the tune's volume in the tracker toolbar
+  _sidMakeParamKnob(document.getElementById("sid-song-vol"));
+  _sidMakeParamKnob(document.getElementById("sid-song-vol2"));
+}
+
+// A knob in front of a range input: the input stays the value, hidden.
+function _sidMakeParamKnob(input) {
+  if (!input || document.getElementById(input.id + "-knob")) return;
+  const knob = document.createElement("div");
+  knob.id = input.id + "-knob";
+  knob.className = "websid-play-knob sid-param-knob";
+  knob.tabIndex = 0;
+  knob.setAttribute("role", "slider");
+  knob.setAttribute("aria-label", input.getAttribute("aria-label") || input.closest(".sid-slider-row")?.querySelector(".sid-sl-lbl")?.textContent || input.closest(".sid-wave-row")?.querySelector(".sid-mini-lbl")?.textContent || input.id);
+  knob.setAttribute("aria-valuemin", input.min);
+  knob.setAttribute("aria-valuemax", input.max);
+  knob.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path class="websid-play-knob-track" d=""/><path class="websid-play-knob-value" d=""/><circle class="websid-play-knob-body" cx="20" cy="20" r="11.5"/><line class="websid-play-knob-pointer" x1="20" y1="20" x2="20" y2="11"/></svg>';
+  input.classList.add("sid-range--knob-source");
+  input.after(knob);
+  const set = function(pct) {
+    const min = Number(input.min) || 0;
+    const max = Number(input.max) || 100;
+    input.value = String(Math.round(min + Math.max(0, Math.min(100, pct)) * (max - min) / 100));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    _sidParamKnobSync(input);
+  };
+  _sidKnobBind(knob, function() {
+    const min = Number(input.min) || 0;
+    const max = Number(input.max) || 100;
+    return (Number(input.value) - min) * 100 / Math.max(1, max - min);
+  }, set);
+  _sidParamKnobSync(input);
 }
 
 function _sidLoadInstUI() {
@@ -1221,6 +1241,51 @@ function _sidLoadInstUI() {
   const ts = document.getElementById("sid-table-speed"); if (ts) ts.value = inst.tableSpeed;
   _sidRenderTable();
   _sidDrawADSR();
+}
+
+/* Deletes instruments (a Set of indices; one always stays). The notes of a deleted one
+   play the nearest kept instrument before it, the later numbers move down. */
+function _sidInstRemove(drop) {
+  const keep = _sidInsts.map(function(_, i) { return i; }).filter(function(i) { return !drop.has(i); });
+  if (!keep.length) keep.push(0);
+  const remap = _sidInsts.map(function(_, i) {
+    let k = keep.length - 1;
+    while (k > 0 && keep[k] > i) k--;
+    return k;
+  });
+  _sidPatterns.forEach(function(pat) {
+    pat.forEach(function(col) { col.forEach(function(c) { c.inst = remap[c.inst] != null ? remap[c.inst] : 0; }); });
+  });
+  _sidInsts = keep.map(function(i) { return _sidInsts[i]; });
+  _sidInst = Math.min(remap[_sidInst] != null ? remap[_sidInst] : 0, _sidInsts.length - 1);
+  _sidBuildInstSel(); _sidLoadInstUI(); _sidBuildTracker();
+  if (typeof _sidRollDraw === "function") _sidRollDraw();
+  _sidHistSchedule();
+  return _sidInsts.length;
+}
+// How many notes play each instrument.
+function _sidInstUse() {
+  const use = _sidInsts.map(function() { return 0; });
+  _sidPatterns.forEach(function(pat) {
+    pat.forEach(function(col) { col.forEach(function(c) { if (c.note != null && use[c.inst] != null) use[c.inst]++; }); });
+  });
+  return use;
+}
+async function _sidInstDeleteCurrent() {
+  if (_sidInsts.length < 2) return;
+  const n = _sidInstUse()[_sidInst];
+  if (n) {
+    const into = _sidInsts[_sidInst ? _sidInst - 1 : 1];
+    if (!(await _showConfirm(tf("sidDeleteInstrumentUsed", { n: n, name: into.name })))) return;
+  }
+  _sidInstRemove(new Set([_sidInst]));
+}
+function _sidInstRemoveUnused() {
+  const use = _sidInstUse();
+  const drop = new Set(use.map(function(n, i) { return n ? -1 : i; }).filter(function(i) { return i >= 0; }));
+  if (drop.size === _sidInsts.length) drop.delete(0);
+  if (drop.size) _sidInstRemove(drop);
+  return drop.size;
 }
 
 /* ── Wave / arpeggio table editor ── */
@@ -1683,6 +1748,7 @@ function _sidBuildTracker() {
   if (chips) chips.value = String(pat.length / 3);
   const addr = document.getElementById("sid-chip-addr");
   if (addr) { addr.value = String(_sidSid2Addr); addr.hidden = pat.length <= 3; }
+  _sidSongVolSync(pat.length > 3);
   _sidRollSyncHeader();
   let html = "<thead><tr><th></th>";
   for (let v = 0; v < pat.length; v++) {
@@ -1903,7 +1969,7 @@ const _SID_ROLL_COLORS = ["#ffb347", "#7c9cff", "#ff6b6b", "#4ade80", "#f7d154",
 
 const _SID_ROLL_VOICE = ["#38d6ff", "#ff5ccf", "#4ade80", "#ffb020", "#a78bfa", "#f87171"];
 
-var _sidRollView = { row0: 0, colW: 14, rowPx: 11, lo: 36, span: 48, voice: 0, raf: 0, drag: null, hover: null, follow: true };
+var _sidRollView = { row0: 0, colW: 14, rowPx: 11, lo: 36, span: 48, voice: 0, raf: 0, drag: null, hover: null, follow: true, sel: new Set(), band: null };
 
 function _sidRollState() {
   try { return JSON.parse(localStorage.getItem("c64va-sid-roll") || "{}") || {}; } catch (_) { return {}; }
@@ -2072,12 +2138,132 @@ function _sidRollSetEnd(n, end) {
   n.end = end;
 }
 
+// The note's own row is cleared, and the note before it on the voice keeps its end: where it rang
+// on into this note, a note-off takes the note's place.
 function _sidRollDelete(n) {
+  const notes = _sidRollNotes();
+  const prev = notes.filter(function(x) { return x.v === n.v && x.start < n.start; })
+    .reduce(function(a, x) { return !a || x.start > a.start ? x : a; }, null);
   _sidRollWrite(n.v, n.start, {});
   const at = n.end < _sidRollTotalRows() ? _sidRollCell(n.v, n.end) : null;
   if (at && at.cell && at.cell.note == null && at.cell.fx === "C") _sidRollWrite(n.v, n.end, {});
+  if (prev && prev.end === n.start) _sidRollWrite(n.v, n.start, { fx: "C" });
 }
-
+// ---- selection, clipboard and quantize of the horizontal tracker ----
+var _sidRollClip = null;
+// the grid in rows, and whether a recording is quantized when it stops; no initializer: the setup
+// sets them before these lines run
+var _sidQuant;
+var _sidQuantRec;
+function _sidRollKey(n) { return n.v + ":" + n.start; }
+function _sidRollSelected(notes) {
+  return notes.filter(function(n) { return _sidRollView.sel.has(_sidRollKey(n)); });
+}
+// Puts notes in like a paste, over what is there: { v, start, len, cell }, len null = rings on.
+// Returns the keys of the notes placed.
+function _sidRollPlace(items) {
+  const total = _sidRollTotalRows(), voices = _sidVoiceCount(), keys = [];
+  items.filter(function(it) { return it.v < voices && it.start >= 0 && it.start < total; })
+    .sort(function(a, b) { return a.start - b.start; })
+    .forEach(function(it) {
+      const end = it.len == null ? it.start + 1 : Math.min(total, it.start + Math.max(1, it.len));
+      // a note it cuts short loses the note-off that ended it further on
+      const cut = _sidRollNotes().find(function(n) { return n.v === it.v && n.start < it.start && n.end > end; });
+      if (cut && cut.end < total) {
+        const off = _sidRollCell(it.v, cut.end);
+        if (off && off.cell && off.cell.note == null && off.cell.fx === "C") _sidRollWrite(it.v, cut.end, {});
+      }
+      for (let g = it.start + 1; g < end; g++) {
+        const at = _sidRollCell(it.v, g);
+        if (at && at.cell && (at.cell.note != null || at.cell.fx === "C")) _sidRollWrite(it.v, g, {});
+      }
+      _sidRollWrite(it.v, it.start, Object.assign({}, it.cell));
+      if (it.len != null && end < total) {
+        const at = _sidRollCell(it.v, end);
+        if (at && at.cell && at.cell.note == null && !at.cell.fx) _sidRollWrite(it.v, end, { fx: "C" });
+      }
+      keys.push(it.v + ":" + it.start);
+    });
+  return keys;
+}
+function _sidRollItem(n, start) {
+  const at = _sidRollCell(n.v, n.start);
+  return { v: n.v, start: start, len: n.end >= _sidRollTotalRows() ? null : n.end - n.start, cell: Object.assign({}, at.cell) };
+}
+function _sidRollCopySelected() {
+  const sel = _sidRollSelected(_sidRollNotes());
+  if (!sel.length) return 0;
+  const first = Math.min.apply(null, sel.map(function(n) { return n.start; }));
+  _sidRollClip = sel.map(function(n) { return _sidRollItem(n, n.start - first); });
+  return sel.length;
+}
+function _sidRollDeleteSelected() {
+  const sel = _sidRollSelected(_sidRollNotes()).sort(function(a, b) { return b.start - a.start; });
+  // one by one, each against the notes as they are by then
+  sel.forEach(function(n) {
+    const now = _sidRollNotes().find(function(x) { return x.v === n.v && x.start === n.start; });
+    if (now) _sidRollDelete(now);
+  });
+  _sidRollView.sel.clear();
+  return sel.length;
+}
+function _sidRollCutSelected() {
+  return _sidRollCopySelected() ? _sidRollDeleteSelected() : 0;
+}
+function _sidRollPasteAt(row) {
+  if (!_sidRollClip || !_sidRollClip.length) return 0;
+  const keys = _sidRollPlace(_sidRollClip.map(function(c) { return Object.assign({}, c, { start: row + c.start }); }));
+  _sidRollView.sel = new Set(keys);
+  return keys.length;
+}
+// Each note's start to the nearest multiple of grid rows, its length kept. Returns the keys after.
+function _sidRollQuantizeNotes(notes, grid) {
+  const total = _sidRollTotalRows();
+  const keys = [], moving = [];
+  notes.forEach(function(n) {
+    const start = Math.max(0, Math.min(total - 1, Math.round(n.start / grid) * grid));
+    if (start === n.start) keys.push(_sidRollKey(n));
+    else moving.push({ n: n, item: _sidRollItem(n, start) });
+  });
+  moving.slice().sort(function(a, b) { return b.n.start - a.n.start; }).forEach(function(m) {
+    const now = _sidRollNotes().find(function(x) { return x.v === m.n.v && x.start === m.n.start; });
+    if (now) _sidRollDelete(now);
+  });
+  return keys.concat(_sidRollPlace(moving.map(function(m) { return m.item; })));
+}
+function _sidRollQuantizeSelected() {
+  const grid = _sidQuant || 4;
+  const sel = _sidRollSelected(_sidRollNotes());
+  if (grid < 2 || !sel.length) return 0;
+  _sidRollView.sel = new Set(_sidRollQuantizeNotes(sel, grid));
+  return sel.length;
+}
+// The notes of a take, when it stops: their rows in the song, then quantized.
+function _sidRecordQuantize(rec, grid) {
+  if (grid < 2 || !rec.taken || !rec.taken.length) return 0;
+  const want = new Set(rec.taken.map(function(t) {
+    const idx = _sidPatterns.indexOf(t.pattern);
+    let pos = _sidSong.indexOf(idx, rec.songPos0 || 0);
+    if (pos < 0) pos = _sidSong.indexOf(idx);
+    return pos < 0 ? "" : t.voice + ":" + (pos * _SID_ROWS + t.row);
+  }));
+  const notes = _sidRollNotes().filter(function(n) { return want.has(_sidRollKey(n)); });
+  _sidRollQuantizeNotes(notes, grid);
+  return notes.length;
+}
+function _sidRollPasteRow() {
+  const hv = _sidRollView.hover;
+  return hv && hv.row < _sidRollTotalRows() ? hv.row : _sidSongPos * _SID_ROWS + _sidSel.row;
+}
+function _sidRollSyncTools() {
+  const has = _sidRollView.sel.size > 0;
+  [["sid-roll-cut", has], ["sid-roll-copy", has], ["sid-roll-delete", has], ["sid-roll-paste", !!(_sidRollClip && _sidRollClip.length)], ["sid-roll-quantize", has]]
+    .forEach(function(p) { const el = document.getElementById(p[0]); if (el) el.disabled = !p[1]; });
+}
+function _sidRollAfterEdit() {
+  _sidRollSyncTools();
+  if (typeof _sidHistSchedule === "function") _sidHistSchedule();
+}
 function _sidRollPlayRow() {
   const playing = !!(_sidTimer || _sidWaPlay);
   if (!playing) return null;
@@ -2177,6 +2363,13 @@ function _sidRollDraw() {
       ctx.fillStyle = "#fff";
       ctx.fillRect(x1 - 3, y, 2, h);
     }
+    if (view.sel.has(_sidRollKey(n))) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x0 + 1, y + 1, x1 - x0 - 3, h - 2);
+      ctx.lineWidth = 1;
+    }
     if (x1 - x0 > 30 && h >= 9) {
       ctx.fillStyle = "#0b1020";
       ctx.font = Math.min(10, Math.floor(h - 1)) + "px monospace";
@@ -2184,6 +2377,17 @@ function _sidRollDraw() {
     }
     ctx.globalAlpha = 1;
   });
+  if (view.band) {
+    const b = view.band;
+    const rx0 = xOf(Math.min(b.r0, b.r1)), rx1 = xOf(Math.max(b.r0, b.r1));
+    const ry0 = yOf(Math.max(b.p0, b.p1)), ry1 = yOf(Math.min(b.p0, b.p1)) + g.rowH;
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.strokeRect(rx0 + 0.5, ry0 + 0.5, rx1 - rx0, ry1 - ry0);
+    ctx.setLineDash([]);
+  }
   // hover cell on the active voice
   const hv = view.hover;
   if (hv && !view.drag && hv.pitch >= view.lo && hv.pitch < view.lo + view.span && hv.row < total) {
@@ -2322,8 +2526,29 @@ function _sidSetupRoll() {
     if (!hit || hit.row >= _sidRollTotalRows()) return;
     const notes = _sidRollNotes();
     const n = _sidRollNoteAt(notes, hit);
-    if (e.button === 2) { if (n) _sidRollDelete(n); return; }
+    cv.focus({ preventScroll: true });
+    if (e.button === 2) {
+      if (n) { _sidRollView.sel.delete(_sidRollKey(n)); _sidRollDelete(n); _sidRollAfterEdit(); }
+      return;
+    }
     if (e.button !== 0) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && n) {
+      const key = _sidRollKey(n);
+      if (_sidRollView.sel.has(key)) _sidRollView.sel.delete(key); else _sidRollView.sel.add(key);
+      _sidRollSyncTools();
+      e.preventDefault();
+      return;
+    }
+    if (e.shiftKey) {
+      // a frame: it selects every note it touches, Ctrl+Shift adds to the selection
+      _sidRollView.band = { r0: hit.rowX, p0: hit.pitch, r1: hit.rowX, p1: hit.pitch, add: mod };
+      try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+      return;
+    }
+    _sidRollView.sel.clear();
+    _sidRollSyncTools();
     const grab = _sidRollGrab(notes, hit);
     if (grab) {
       _sidRollView.drag = grab.kind === "move" ? _sidRollMoveStart(notes, grab.note, hit) : { kind: "len", note: grab.note, limit: _sidRollNoteLimit(notes, grab.note) };
@@ -2347,6 +2572,10 @@ function _sidSetupRoll() {
   cv.addEventListener("pointermove", function(e) {
     const hit = _sidRollHit(cv, e);
     _sidRollView.hover = hit;
+    if (_sidRollView.band) {
+      if (hit) { _sidRollView.band.r1 = hit.rowX; _sidRollView.band.p1 = hit.pitch; }
+      return;
+    }
     const d = _sidRollView.drag;
     if (!d) {
       const grab = hit && hit.row < _sidRollTotalRows() ? _sidRollGrab(_sidRollNotes(), hit) : null;
@@ -2371,12 +2600,53 @@ function _sidSetupRoll() {
     }
   });
   const endDrag = function(e) {
+    const b = _sidRollView.band;
+    if (b) {
+      _sidRollView.band = null;
+      const r0 = Math.min(b.r0, b.r1), r1 = Math.max(b.r0, b.r1), p0 = Math.min(b.p0, b.p1), p1 = Math.max(b.p0, b.p1);
+      if (!b.add) _sidRollView.sel.clear();
+      _sidRollNotes().forEach(function(n) {
+        if (n.start <= r1 && n.end > r0 && n.note >= p0 && n.note <= p1) _sidRollView.sel.add(_sidRollKey(n));
+      });
+      _sidRollSyncTools();
+    }
     _sidRollView.drag = null;
     if (e && e.pointerId != null) { try { cv.releasePointerCapture(e.pointerId); } catch (_) {} }
   };
   cv.addEventListener("pointerup", endDrag);
   cv.addEventListener("pointercancel", endDrag);
   cv.addEventListener("pointerleave", function() { _sidRollView.hover = null; _sidRollView.edge = null; });
+  cv.tabIndex = 0;
+  const rollCommand = function(what) {
+    if (what === "cut") _sidRollCutSelected();
+    else if (what === "copy") _sidRollCopySelected();
+    else if (what === "paste") _sidRollPasteAt(_sidRollPasteRow());
+    else if (what === "delete") _sidRollDeleteSelected();
+    else if (what === "quantize") _sidRollQuantizeSelected();
+    _sidRollAfterEdit();
+  };
+  ["cut", "copy", "paste", "delete", "quantize"].forEach(function(what) {
+    document.getElementById("sid-roll-" + what)?.addEventListener("click", function() { rollCommand(what); });
+  });
+  cv.addEventListener("keydown", function(e) {
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    let what = null;
+    if (mod && k === "x") what = "cut";
+    else if (mod && k === "c") what = "copy";
+    else if (mod && k === "v") what = "paste";
+    else if (!mod && (e.key === "Delete" || e.key === "Backspace")) what = "delete";
+    else if (!mod && k === "q") what = "quantize";
+    else if (mod && k === "a") {
+      _sidRollView.sel = new Set(_sidRollNotes().map(_sidRollKey));
+      _sidRollSyncTools();
+    } else if (e.key === "Escape" && _sidRollView.sel.size) {
+      _sidRollView.sel.clear();
+      _sidRollSyncTools();
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (what) rollCommand(what);
+  });
   // wheel: scroll in time, Shift = pitch, Ctrl = zoom
   cv.addEventListener("wheel", function(e) {
     e.preventDefault();
@@ -2408,16 +2678,20 @@ function _sidHistSnap(prev) {
       return prev && prev.pats[i] === text ? prev.pats[i] : text;
     }),
     song: JSON.stringify(_sidSong), speed: _sidSpeed, sid2: _sidSid2Addr, title: title ? title.textContent : "",
+    vol: _sidVol(), vol2: _sidVol2(), ntsc: _sidIsNtsc(),
   };
 }
 function _sidHistSame(a, b) {
   return a.insts === b.insts && a.song === b.song && a.speed === b.speed && a.sid2 === b.sid2 && a.title === b.title
+    && a.vol === b.vol && a.vol2 === b.vol2 && a.ntsc === b.ntsc
     && a.pats.length === b.pats.length && a.pats.every(function(text, i) { return text === b.pats[i]; });
 }
 function _sidHistRender() {
   const set = function(id, on) { const el = document.getElementById(id); if (el) el.disabled = !on; };
   set("sid-undo", _sidHist.undo.length > 0);
   set("sid-redo", _sidHist.redo.length > 0);
+  set("sid-roll-undo", _sidHist.undo.length > 0);
+  set("sid-roll-redo", _sidHist.redo.length > 0);
 }
 function _sidHistCheck() {
   clearTimeout(_sidHist.timer);
@@ -2448,6 +2722,9 @@ function _sidHistApply(to, from) {
   _sidSong = parse(to.song);
   _sidSpeed = to.speed;
   _sidSid2Addr = to.sid2;
+  _sidSetSongVol(to.vol);
+  _sidSetSongVol2(to.vol2 != null ? to.vol2 : to.vol);
+  _sidSetNtsc(to.ntsc);
   const inst = _sidInsts.findIndex(function(x, i) { return JSON.stringify(x) !== JSON.stringify(before[i]); });
   _sidInst = Math.max(0, Math.min(_sidInsts.length - 1, inst >= 0 ? inst : _sidInst));
   const pat = to.pats.findIndex(function(text, i) { return text !== from.pats[i]; });
@@ -2479,7 +2756,7 @@ function _sidPreviewSelectedRow() {
   const row = Math.max(0, Math.min(_SID_ROWS - 1, _sidSel.row));
   _sidEnsureAudio();
   const when = _sidAudio.currentTime + 0.02;
-  const rowSec = Math.max(_sidSpeed, 1) / 50;
+  const rowSec = Math.max(_sidSpeed, 1) / _sidFps();
   const notes = [];
   for (let v = 0; v < pat.length; v++) {
     const cell = pat[v]?.[row];
@@ -2626,7 +2903,7 @@ function _sidPlayNote(inst, note, when, holdSec) {
   const td = _sidTuneData({ insts: [inst], patterns: [], song: [0], speed: 255 });
   const e = _sidEngineNew(td);
   const ins = td.insts[0];
-  const hold = Math.max(2, Math.round(Math.max(0.04, holdSec) * 50));
+  const hold = Math.max(2, Math.round(Math.max(0.04, holdSec) * _sidFps()));
   const tail = Math.min(150, Math.ceil(_SID_DCR[ins.r] / 20) + 6);
   if (_sidUsesNativeCore()) {
     _sidRenderNative(e, hold + tail, ac.sampleRate, function(eng, k) {
@@ -2652,17 +2929,45 @@ function _sidPlayInst(inst, freq, when, holdSec) {
 }
 
 /* ── Metronome + BPM helpers ─────────────────────────────────────────────
- * BPM derives from the frames-per-row Speed input: PAL 50 Hz, 4 rows/beat.
+ * BPM derives from the frames-per-row Speed input: 50 Hz (PAL) or 60 Hz (NTSC), 4 rows/beat.
  * The metronome runs off the same setInterval tick that drives the tracker
  * row highlight, so it stays in phase with the preview. */
 function _sidComputeBpm() {
-  const rowSec = Math.max(_sidSpeed, 1) / 50;
+  const rowSec = Math.max(_sidSpeed, 1) / _sidFps();
   return Math.round(60 / (rowSec * _SID_ROWS_PER_BEAT));
 }
 
 function _sidUpdateBpmDisplay() {
   const el = document.getElementById("sid-bpm");
   if (el) el.textContent = String(_sidComputeBpm());
+}
+
+function _sidSetSongVol(vol) {
+  _sidSongVol = Math.max(0, Math.min(15, Number(vol) | 0));
+  const el = document.getElementById("sid-song-vol");
+  if (el) { el.value = String(_sidSongVol); _sidParamKnobSync(el); }
+  const val = document.getElementById("sid-song-vol-val");
+  if (val) val.textContent = String(_sidSongVol);
+}
+// Two SIDs: a volume knob for each chip, labelled by chip.
+function _sidSongVolSync(twoSids) {
+  const vol2 = document.getElementById("sid-song-vol2-group");
+  if (vol2) vol2.hidden = !twoSids;
+  const vol1 = document.getElementById("sid-song-vol-lbl");
+  if (vol1) vol1.textContent = t(twoSids ? "sidSongVol1" : "sidSongVol");
+}
+function _sidSetSongVol2(vol) {
+  _sidSongVol2 = Math.max(0, Math.min(15, Number(vol) | 0));
+  const el = document.getElementById("sid-song-vol2");
+  if (el) { el.value = String(_sidSongVol2); _sidParamKnobSync(el); }
+  const val = document.getElementById("sid-song-vol2-val");
+  if (val) val.textContent = String(_sidSongVol2);
+}
+function _sidSetNtsc(on) {
+  _sidNtsc = !!on;
+  const el = document.getElementById("sid-video");
+  if (el) el.value = _sidNtsc ? "ntsc" : "pal";
+  _sidUpdateBpmDisplay();
 }
 
 function _sidPlayMetronomeClick(accent) {
@@ -2754,6 +3059,7 @@ function _sidRecordNote(note) {
   const rec = _sidRecording;
   if (!rec) return false;
   rec.pattern[rec.voice][rec.row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  if (rec.taken) rec.taken.push({ pattern: rec.pattern, row: rec.row, voice: rec.voice });
   _sidSetCellText(rec.voice, rec.row);
   _sidEnsureAudio();
   _sidPlayInst(_sidInsts[rec.inst], _sidNoteFreq(note), _sidAudio.currentTime + 0.01, Math.max(0.08, rec.rowMs / 1000 * 0.9));
@@ -2784,6 +3090,7 @@ function _sidRecordPolyNote(note, midiNote) {
   if (!inChord) rec.chord = { pattern: rec.pattern, row: rec.row, at: now };
   const row = rec.chord.row;
   rec.pattern[voice][row] = { note: note, inst: rec.inst, fx: null, fxval: 0 };
+  if (rec.taken) rec.taken.push({ pattern: rec.pattern, row: row, voice: voice });
   _sidSetCellText(voice, row);
   rec.held.set(midiNote, { voice: voice, pattern: rec.pattern, row: row });
   _sidEnsureAudio();
@@ -2810,8 +3117,8 @@ function _sidRecordStart() {
   _sidStop();
   _sidRecording = {
     pattern: _sidCurPat(), voice: _sidSel.voice, inst: _sidInst, startRow: _sidSel.row,
-    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 20, startedAt: performance.now(), lastStep: -1, timer: null,
-    held: new Map(), pendingOff: new Set(), chord: null
+    row: _sidSel.row, rowMs: Math.max(1, _sidSpeed) * 1000 / _sidFps(), startedAt: performance.now(), lastStep: -1, timer: null,
+    held: new Map(), pendingOff: new Set(), chord: null, taken: [], songPos0: _sidSongPos
   };
   _sidRecordTick();
   _sidRecording.timer = setInterval(_sidRecordTick, 16);
@@ -2823,6 +3130,7 @@ function _sidRecordStop() {
   if (!rec) return;
   if (rec.timer) clearInterval(rec.timer);
   _sidRecording = null;
+  if (_sidRecordQuantize(rec, _sidQuantRec ? (_sidQuant || 4) : 0)) _sidBuildTracker();
   _sidRecordRender();
   if (typeof _sidHistSchedule === "function") _sidHistSchedule();
 }
@@ -2868,8 +3176,8 @@ function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026", 
   wStr(0x16, name || "Visual Assembler preview", 32);
   wStr(0x36, "Visual Assembler", 32);
   wStr(0x56, released, 32);
-  // Flags: bit2..3 = PAL (01), bit4..5 = 6581 (01) → 0x14
-  out[0x76]=0x00; out[0x77]=0x14;
+  // Flags: bit2..3 = PAL (01) or NTSC (10), bit4..5 = 6581 (01) → 0x14 / 0x18
+  out[0x76]=0x00; out[0x77]=_sidIsNtsc() ? 0x18 : 0x14;
   // startPage, pageLength, secondSIDAddress = 0; PSID v3 for a second SID
   if (secondSid) { out[5]=0x03; out[0x7A]=(secondSid - 0xD000) >> 4; }
   out.set(prgBytes, HEADER_LEN);
@@ -4145,7 +4453,7 @@ function _sidAnaFilterGain(regs, at, hz) {
 function _sidAnaVoiceLevels(regs, at, bit, env, bands) {
   const out = new Array(bands).fill(0);
   const b = at + bit * 7, ctl = regs[b + 4], mode = regs[at + 0x18];
-  const hz = (regs[b] | (regs[b + 1] << 8)) * 985248 / 16777216;
+  const hz = (regs[b] | (regs[b + 1] << 8)) * _sidClockHz() / 16777216;
   const routed = (regs[at + 0x17] >> bit) & 1;
   const vol = env * (mode & 15) / 15;
   if (!(ctl & 0xF0) || (ctl & 8) || hz < 1 || vol <= 0 || (bit === 2 && !routed && (mode & 0x80))) return out;
@@ -4542,10 +4850,10 @@ function _sidWaSchedule() {
     }
     for (let k = from; k < e.rows.length; k++) {
       const r = e.rows[k];
-      w.events.push({ time: w.next + (r.frame - first) / 50, row: r.row, opos: r.opos, pat: r.pat, frame: r.frame });
+      w.events.push({ time: w.next + (r.frame - first) / _sidFps(), row: r.row, opos: r.opos, pat: r.pat, frame: r.frame });
     }
     e.rows.length = 0;
-    w.next += chunk / 50;
+    w.next += chunk / _sidFps();
   }
   while (w.events.length && w.events[0].time <= now) _sidWaShowRow(w.events.shift());
 }
@@ -4678,14 +4986,15 @@ function _sidPauseToggle() {
  * (indexed by instrument number), the wave/arpeggio tables are concatenated
  * (at most 255 steps in all). */
 function _sidFreqTables() {
-  if (_sidFreqTables.cache) return _sidFreqTables.cache;
+  const clock = _sidClockHz();
+  if (_sidFreqTables.cache && _sidFreqTables.cache.clock === clock) return _sidFreqTables.cache;
   const f = [], semi = [];
   for (let n = 0; n < 96; n++) {
     const hz = 440 * Math.pow(2, (n - 57) / 12);
-    f.push(Math.min(0xFFFF, Math.round(hz * 16777216 / 985248)));
+    f.push(Math.min(0xFFFF, Math.round(hz * 16777216 / clock)));
   }
   for (let n = 0; n < 96; n++) semi.push(Math.max(0, f[Math.min(95, n + 1)] - f[n]) || (n ? semi[n - 1] : 0));
-  _sidFreqTables.cache = { f: f, semi: semi };
+  _sidFreqTables.cache = { f: f, semi: semi, clock: clock };
   return _sidFreqTables.cache;
 }
 
@@ -4707,7 +5016,7 @@ function _sidTuneData(opts) {
     // the sweep runs from cut toward cutEnd: the sign of the per-frame step follows the direction
     a.icsp.push(!o.cutSpeed ? 0 : o.cutEnd >= o.cut ? o.cutSpeed : (256 - o.cutSpeed) & 0xFF);
     a.ifl.push((o.filt ? 1 : 0) | (o.cutPing ? 2 : 0)); a.ires.push(o.res << 4);
-    a.imode.push((o.lp?0x10:0) | (o.bp?0x20:0) | (o.hp?0x40:0) | (o.off3?0x80:0)); a.ivol.push(o.vol);
+    a.imode.push((o.lp?0x10:0) | (o.bp?0x20:0) | (o.hp?0x40:0) | (o.off3?0x80:0)); a.ivol.push(o.songVol ? 0x10 : o.vol); // $10 = the song's
     a.ivdl.push(o.vibDelay); a.ivsp.push(o.vibSpeed); a.ivdp.push(o.vibDepth);
     const pmin = Math.min(o.pwmMin, o.pwmMax), pmax = Math.max(o.pwmMin, o.pwmMax);
     a.ipms.push(o.pwmSpeed); a.ipmnl.push(pmin & 0xFF); a.ipmnh.push(pmin >> 8); a.ipmxl.push(pmax & 0xFF); a.ipmxh.push(pmax >> 8);
@@ -4725,7 +5034,9 @@ function _sidTuneData(opts) {
     if (at < 0) steps.forEach(function(x){ a.tw.push(x[0]); a.tn.push(x[1]); a.ta.push(x[2]); });
   });
   const chips = patterns[0] && patterns[0].length > 3 ? 2 : 1;
-  return { speed: speed, insts: insts, patterns: patterns, song: song.length ? song : [0], a: a, chips: chips };
+  const vol = Math.max(0, Math.min(15, (opts.vol !== undefined ? opts.vol : _sidVol()) | 0));
+  const vol2 = Math.max(0, Math.min(15, (opts.vol2 !== undefined ? opts.vol2 : opts.vol !== undefined ? opts.vol : _sidVol2()) | 0));
+  return { speed: speed, vol: vol, vol2: vol2, insts: insts, patterns: patterns, song: song.length ? song : [0], a: a, chips: chips };
 }
 
 /* Cell → player bytes: note 1..96 (0 = none), instrument (out-of-range → 0), fx code, fx value. */
@@ -4753,7 +5064,7 @@ function _sidEngineNew(td) {
   return { td: td, a: td.a, ft: _sidFreqTables(), chips: chips, base: [0, 7, 14, 25, 32, 39].slice(0, voices),
     regs: new Uint8Array(25 * chips), trig: new Array(voices).fill(false),
     tick: td.speed, spd: td.speed, row: 0, opos: 0, pat: td.song[0] | 0, frame: 0, rows: [],
-    v: Array.from({ length: voices }, voice), vols: [0, 0], fs: [filter(), filter()] };
+    v: Array.from({ length: voices }, voice), vols: [td.vol | 0, (td.vol2 !== undefined ? td.vol2 : td.vol) | 0], fs: [filter(), filter()] };
 }
 
 function _sidEngTab(e, s, k) {
@@ -4782,7 +5093,7 @@ function _sidEngNoteOn(e, v, n, i) {
   if (a.itln[i]) _sidEngTab(e, s, a.itst[i]);
   e.regs[base + 5] = a.iad[i];
   e.regs[base + 6] = a.isr[i];
-  e.vols[chip] = a.ivol[i];
+  if (a.ivol[i] < 0x10) e.vols[chip] = a.ivol[i];
   if (a.ifl[i] & 1) {
     f.own = v;
     f.cut = f.start = a.icul[i] | (a.icuh[i] << 8);
@@ -4939,7 +5250,7 @@ function _sidSynthNew(sr) {
 }
 
 function _sidSynthRender(sy, regs, trig, out, off, count) {
-  const sr = sy.sr, dt = 1 / sr, clk = 985248 / 16777216 / sr;
+  const sr = sy.sr, dt = 1 / sr, clk = _sidClockHz() / 16777216 / sr;
   const fr = [0, 0, 0], pw = [0, 0, 0], ctl = [0, 0, 0], at = [0, 0, 0], kd = [1, 1, 1], su = [0, 0, 0], kr = [1, 1, 1];
   for (let v = 0; v < 3; v++) {
     const b = 7 * v;
@@ -5014,13 +5325,13 @@ function _sidSynthRender(sy, regs, trig, out, off, count) {
    runs before each frame (note previews trigger notes / release from it). */
 function _sidRenderEngine(e, frames, sr, hook) {
   const synths = e.synths || (e.synths = Array.from({ length: e.chips }, function() { return _sidSynthNew(sr); }));
-  const total = Math.ceil(frames * sr / 50);
+  const total = Math.ceil(frames * sr / _sidFps());
   const parts = synths.map(function() { return new Float32Array(total); });
   let pos = 0, acc = 0;
   for (let k = 0; k < frames; k++) {
     if (hook) hook(e, k);
     _sidEngFrame(e);
-    acc += sr / 50;
+    acc += sr / _sidFps();
     const n = Math.min(total - pos, Math.floor(acc) - pos);
     if (n > 0) {
       synths.forEach(function(sy, c) {
@@ -5072,7 +5383,7 @@ function _sidDecodePcm16(base64) {
 }
 
 function _sidRenderNativeFrames(frames, sampleRate, sessionId) {
-  const payload = { sampleRate: Math.round(sampleRate), model: _sidPreviewModel, engine: _sidPreviewEngine, frames: frames };
+  const payload = { sampleRate: Math.round(sampleRate), model: _sidPreviewModel, engine: _sidPreviewEngine, ntsc: _sidIsNtsc(), frames: frames };
   if (sessionId) payload.sessionId = sessionId;
   return window.electronAPI.renderSidPreview(payload).then(function(base64) {
     const pcm = _sidDecodePcm16(base64);
@@ -5124,7 +5435,7 @@ function _sidInstBytes(ins) {
  * 0xFE (effect column, no extension) and the unmarked legacy layout still load. */
 function _sidInstExtBytes(ins) {
   const o = _sidInstNorm(ins);
-  const flags = (o.filt?0x04:0) | (o.off3?0x08:0) | (o.hr?0x10:0) | (o.cutPing?0x20:0);
+  const flags = (o.filt?0x04:0) | (o.off3?0x08:0) | (o.hr?0x10:0) | (o.cutPing?0x20:0) | (o.songVol?0x40:0);
   const out = [flags, o.cutEnd & 0xFF, o.cutEnd >> 8, o.cutSpeed, o.vibDelay, o.vibSpeed, o.vibDepth,
     o.pwmSpeed, o.pwmMin & 0xFF, o.pwmMin >> 8, o.pwmMax & 0xFF, o.pwmMax >> 8,
     o.gateTimer, o.firstWave, o.tableSpeed, o.tableLoop < 0 ? 0xFF : o.tableLoop, o.table.length];
@@ -5136,7 +5447,7 @@ function _sidInstExtBytes(ins) {
 
 function _sidReadInstExt(ins, src, p) {
   const flags = src[p++] || 0;
-  ins.filt = !!(flags & 0x04); ins.off3 = !!(flags & 0x08); ins.hr = !!(flags & 0x10); ins.cutPing = !!(flags & 0x20);
+  ins.filt = !!(flags & 0x04); ins.off3 = !!(flags & 0x08); ins.hr = !!(flags & 0x10); ins.cutPing = !!(flags & 0x20); ins.songVol = !!(flags & 0x40);
   ins.cutEnd = (src[p++] || 0) | ((src[p++] || 0) << 8);
   ins.cutSpeed = src[p++] || 0;
   ins.vibDelay = src[p++] || 0; ins.vibSpeed = src[p++] || 0; ins.vibDepth = src[p++] || 0;
@@ -5181,6 +5492,9 @@ function _sidSerialize() {
   const song = (_sidSong && _sidSong.length) ? _sidSong : [0];
   out.push(Math.min(255, song.length) & 0xFF);
   song.slice(0, 255).forEach(function(idx){ out.push(idx & 0xFF); });
+  // trailer: $A6, the tune's volume, timing flags (bit 0 = NTSC), the second SID's volume; older saves end before it
+  // ($A5: the same, from before the instruments' volume left the editor)
+  out.push(0xA6, _sidVol(), _sidIsNtsc() ? 1 : 0, _sidVol2());
   return Uint8Array.from(out);
 }
 
@@ -5234,6 +5548,19 @@ function _sidDeserialize(src) {
     // Pre-song-list save: reproduce the old "play every pattern, in
     // storage order" behavior as an explicit order list.
     _sidSong = _sidPatterns.map(function(_, i){ return i; });
+  }
+  const trailer = src[p] === 0xA5 || src[p] === 0xA6;
+  _sidSetNtsc(trailer ? !!(src[p + 2] & 1) : false);
+  if (src[p] === 0xA6) {
+    _sidSetSongVol(src[p + 1] & 15);
+    _sidSetSongVol2(p + 3 < src.length ? src[p + 3] & 15 : src[p + 1] & 15);
+  }
+  else {
+    // an older save: its instruments set the chip's volume, which is no longer editable;
+    // the first instrument's becomes the tune's, and every instrument keeps to it
+    _sidSetSongVol(_sidInsts[0] ? _sidInsts[0].vol : 15);
+    _sidSetSongVol2(_sidVol());
+    _sidInsts.forEach(function(ins) { ins.songVol = true; });
   }
   _sidSong = _sidSong.map(function(idx){ return Math.max(0, Math.min(_sidPatterns.length - 1, idx|0)); });
   _sidSongPos = 0;
@@ -5796,7 +6123,7 @@ function _sidDumpImport(regs, meta) {
       if (hi > lo) { ins.pwmSpeed = Math.min(255, movement(pwAt, pf, end)); ins.pwmMin = lo; ins.pwmMax = hi; }
       // filter: global registers, routed per voice
       const mv = R(f, at + 0x18);
-      ins.vol = mv & 15;
+      ins.vol = mv & 15; ins.songVol = false;
       ins.off3 = !!(mv & 0x80);
       ins.filt = !!((R(f, at + 0x17) >> vc.bit) & 1);
       if (ins.filt) {
@@ -6042,6 +6369,9 @@ function _sidApplyImportedTune(res, title) {
   _sidPatterns = res.patterns;
   _sidSong = res.song;
   _sidSpeed = res.speed;
+  _sidSetSongVol(res.vol != null ? res.vol : 15);
+  _sidSetSongVol2(res.vol2 != null ? res.vol2 : _sidVol());
+  _sidSetNtsc(!!res.ntsc);
   if (res.sid2) _sidSid2Addr = res.sid2;
   const speedEl = document.getElementById("sid-speed");
   if (speedEl) speedEl.value = String(_sidSpeed);
@@ -6160,7 +6490,7 @@ function _sidExport(kind) {
     const ad = (ins.a<<4) | ins.d;
     const sr = (ins.s<<4) | ins.r;
     const resFilt = (ins.res<<4) | 0;
-    const modeVol = ((ins.lp?0x10:0)|(ins.bp?0x20:0)|(ins.hp?0x40:0)) | ins.vol;
+    const modeVol = ((ins.lp?0x10:0)|(ins.bp?0x20:0)|(ins.hp?0x40:0)) | (ins.songVol ? _sidVol() : ins.vol);
     const bytes = [ctrl, ad, sr, ins.pw&0xFF, (ins.pw>>8)&0x0F, ins.cut&0x07, (ins.cut>>3)&0xFF, resFilt, modeVol];
     lines.push((1000+i*10) + " DATA " + dd(bytes) + " : REM " + ins.name);
   });
@@ -6210,7 +6540,7 @@ function _sidExportAsmPlayable() {
 
   L("; =========================================================",
     "; SID player + tune (generated by Visual Assembler SID editor)",
-    "; PAL 50 Hz IRQ-driven, " + (nv > 3 ? "6 voices (second SID at $" + sid2.toString(16).toUpperCase() + ")" : "3 voices") + ", " + _SID_ROWS + "-row patterns",
+    "; " + (_sidIsNtsc() ? "NTSC 60" : "PAL 50") + " Hz IRQ-driven, " + (nv > 3 ? "6 voices (second SID at $" + sid2.toString(16).toUpperCase() + ")" : "3 voices") + ", " + _SID_ROWS + "-row patterns",
     "; Call JSR sid_init once to start playback; JSR sid_stop to silence.",
     "; Own IRQ instead: skip sid_init's IRQ setup and JSR sid_frame once per frame.",
     "; Speed: " + speed + " frames/row. " + exportedPatterns + " pattern(s) in the bank, " +
@@ -6277,6 +6607,9 @@ function _sidExportAsmPlayable() {
     "LDA #$FF",
     "STA sid_fown",            // no voice owns the filter yet
     ...(nv > 3 ? ["STA sid_fown2"] : []),
+    "LDA #" + hx(td.vol),
+    "STA sid_vol",             // the tune's volume, per SID
+    ...(nv > 3 ? ["LDA #" + hx(td.vol2), "STA sid_vol2"] : []),
     "LDA #" + hx(speed),
     "STA $FB",                 // SID_TICK
     "STA $2F",                 // SID_SPEED_CUR (the F effect can change it later)
@@ -6617,7 +6950,10 @@ function _sidExportAsmPlayable() {
   const takeFilter = function(s) {
     L(
       "LDA sid_ivol,Y",
+      "CMP #$10",                // $10 = the song's volume: the chip keeps it
+      "BCS sid_sv_vol" + s,
       "STA sid_vol" + s,
+      "sid_sv_vol" + s + ":",
       "LDA sid_ifl,Y",
       "AND #$01",
       "BEQ sid_sv_nofilt" + s,
@@ -7062,7 +7398,7 @@ function _sidExportAsmPlayable() {
   L("");
 
   const ft = _sidFreqTables();
-  L("; PAL frequency table (note 0 = C-0, note 95 = B-7) and semitone steps");
+  L("; " + (_sidIsNtsc() ? "NTSC" : "PAL") + " frequency table (note 0 = C-0, note 95 = B-7) and semitone steps");
   chunk("sid_freq_lo", ft.f.map(function(x){ return x & 0xFF; }));
   chunk("sid_freq_hi", ft.f.map(function(x){ return x >> 8; }));
   chunk("sid_semi_lo", ft.semi.map(function(x){ return x & 0xFF; }));
@@ -7114,7 +7450,7 @@ function _sidExportUbBlock() {
     const ins = _sidInstNorm(raw);
     // any routing bit in resfilt = "route the voice that plays this instrument"
     const resFilt = (ins.res<<4) | (ins.filt ? 0x07 : 0x00);
-    const modeVol = ((ins.lp?0x10:0)|(ins.bp?0x20:0)|(ins.hp?0x40:0)|(ins.off3?0x80:0)) | ins.vol;
+    const modeVol = ((ins.lp?0x10:0)|(ins.bp?0x20:0)|(ins.hp?0x40:0)|(ins.off3?0x80:0)) | (ins.songVol ? _sidVol() : ins.vol);
     lines.push("  inst " + [i, hx(_sidWaveByte(ins), 2), hx((ins.a<<4)|ins.d, 2), hx((ins.s<<4)|ins.r, 2),
       hx(ins.pw & 0xFFF, 4), hx(ins.cut & 0x7FF, 4), hx(resFilt, 2), hx(modeVol, 2)].join(", ") +
       "   # " + String(ins.name || "").replace(/[\r\n]+/g, " "));
@@ -7351,6 +7687,27 @@ function setupSidEditor() {
   onId("sid-song-up", "click", function(){ _sidSongMove(-1); });
   onId("sid-song-down", "click", function(){ _sidSongMove(1); });
   onId("sid-play-mode", "change", function(e){ _sidPlayMode = e.target.value === "current" ? "current" : "all"; if(_sidTimer){ _sidPlay(); } });
+  onId("sid-song-vol", "input", function(e){
+    _sidSongVol = Math.max(0, Math.min(15, parseInt(e.target.value, 10) || 0));
+    const val = document.getElementById("sid-song-vol-val");
+    if (val) val.textContent = String(_sidSongVol);
+    if (_sidTimer) { _sidPlay(); }
+  });
+  onId("sid-song-vol2", "input", function(e){
+    _sidSongVol2 = Math.max(0, Math.min(15, parseInt(e.target.value, 10) || 0));
+    const val = document.getElementById("sid-song-vol2-val");
+    if (val) val.textContent = String(_sidSongVol2);
+    if (_sidTimer) { _sidPlay(); }
+  });
+  onId("sid-video", "change", function(e){
+    _sidSetNtsc(e.target.value === "ntsc");
+    if (_sidTimer) { _sidPlay(); }
+  });
+  onId("sid-inst-del", "click", _sidInstDeleteCurrent);
+  onId("sid-inst-unused", "click", function(){
+    const n = _sidInstRemoveUnused();
+    showViceToast(n ? tf("sidRemoveUnusedDone", { n: n }) : t("sidRemoveUnusedNone"), false, true);
+  });
   onId("sid-speed", "input", function(e){
     _sidSpeed = Math.max(1, Math.min(255, parseInt(e.target.value,10)||6));
     _sidUpdateBpmDisplay();
@@ -7547,9 +7904,30 @@ function setupSidEditor() {
     if (k === "-" || k === "/" || e.key === "PageDown") { _sidSetOctave(_sidOctave-1); e.preventDefault(); }
   });
 
+  _sidQuant = 4;
+  _sidQuantRec = false;
+  try {
+    const grid = Number(localStorage.getItem("c64va-sid-quantize"));
+    if ([2, 4, 8, 16].includes(grid)) _sidQuant = grid;
+    _sidQuantRec = localStorage.getItem("c64va-sid-quantize-rec") === "1";
+  } catch (_) {}
+  const quantSel = document.getElementById("sid-quantize");
+  if (quantSel) quantSel.value = String(_sidQuant);
+  const quantRec = document.getElementById("sid-quantize-rec");
+  if (quantRec) quantRec.checked = _sidQuantRec;
+  onId("sid-quantize", "change", function(e) {
+    _sidQuant = Number(e.target.value) || 4;
+    try { localStorage.setItem("c64va-sid-quantize", String(_sidQuant)); } catch (_) {}
+  });
+  onId("sid-quantize-rec", "change", function(e) {
+    _sidQuantRec = !!e.target.checked;
+    try { localStorage.setItem("c64va-sid-quantize-rec", _sidQuantRec ? "1" : "0"); } catch (_) {}
+  });
   // Undo / redo. Text fields keep their own Ctrl+Z.
   onId("sid-undo", "click", _sidUndo);
   onId("sid-redo", "click", _sidRedo);
+  onId("sid-roll-undo", "click", _sidUndo);
+  onId("sid-roll-redo", "click", _sidRedo);
   ["pointerup", "keyup", "change", "input", "wheel"].forEach(function(type) {
     window.addEventListener(type, _sidHistSchedule, { capture: true, passive: true });
   });
@@ -7882,6 +8260,15 @@ function _sidApplyTranslations() {
   setText("#sid-export-psid", t("sidExportPsid"));
   setText(".sid-inst-row .sid-lbl", t("sidInstrumentLabel"));
   setAttr("#sid-inst-add", t("sidAddInstrument"));
+  setAttr("#sid-inst-del", t("sidDeleteInstrument"));
+  setText("#sid-inst-unused", t("sidRemoveUnused"));
+  setText("#sid-song-vol-lbl", t(document.getElementById("sid-song-vol2-group")?.hidden === false ? "sidSongVol1" : "sidSongVol"));
+  setText("#sid-song-vol2-lbl", t("sidSongVol2"));
+  setAttr("#sid-song-vol2", t("sidSongVol2Tip"));
+  setAttr("#sid-song-vol2-knob", t("sidSongVol2Tip"));
+  setAttr("#sid-song-vol", t("sidSongVolTip"));
+  setAttr("#sid-song-vol-knob", t("sidSongVolTip"));
+  setAttr("#sid-video", t("sidVideoTip"));
   setAttr("#sid-preview", t("sidPreview"));
   const sidWaveLbl = document.querySelector(".sid-wave-row .sid-lbl");
   if (sidWaveLbl) sidWaveLbl.textContent = t("sidWaveformLabel");
@@ -7895,7 +8282,7 @@ function _sidApplyTranslations() {
   if (sidAdsrLbls[1]) sidAdsrLbls[1].textContent = t("sidDecay");
   if (sidAdsrLbls[2]) sidAdsrLbls[2].textContent = t("sidSustain");
   if (sidAdsrLbls[3]) sidAdsrLbls[3].textContent = t("sidRelease");
-  [["#sid-cut-lbl", "sidCutoff"], ["#sid-res-lbl", "sidResonance"], ["#sid-vol-lbl", "sidVolume"],
+  [["#sid-cut-lbl", "sidCutoff"], ["#sid-res-lbl", "sidResonance"],
    ["#sid-filt-lbl", "sidRouteFilter"], ["#sid-cut-end-lbl", "sidCutEnd"], ["#sid-cut-speed-lbl", "sidCutSweep"],
    ["#sid-cut-ping-lbl", "sidCutPing"], ["#sid-vib-title", "sidVibratoTitle"], ["#sid-vib-delay-lbl", "sidModDelay"],
    ["#sid-vib-speed-lbl", "sidModSpeed"], ["#sid-vib-depth-lbl", "sidModDepth"], ["#sid-pwm-title", "sidPwmTitle"],
@@ -8015,6 +8402,16 @@ function _sidApplyTranslations() {
   setAttr("#sid-midi-input", t("sidMidiInputAria"));
   setAttr("#sid-bpm", t("sidBpmTip"));
   setAttr("#sid-undo", t("sidUndo"));
+  setAttr("#sid-roll-undo", t("sidUndo"));
+  setAttr("#sid-roll-redo", t("sidRedo"));
+  setText("#sid-quantize-lbl", t("sidQuantize"));
+  setAttr("#sid-quantize", t("sidQuantizeTip"));
+  Array.from(document.getElementById("sid-quantize")?.options || []).forEach(function(o) {
+    o.textContent = tf("sidQuantizeRows", { n: o.value });
+  });
+  setText("#sid-quantize-rec-label", t("sidQuantizeRec"));
+  [["#sid-roll-cut", "sidRollCut"], ["#sid-roll-copy", "sidRollCopy"], ["#sid-roll-paste", "sidRollPaste"], ["#sid-roll-delete", "sidRollDelete"], ["#sid-roll-quantize", "sidRollQuantize"]]
+    .forEach(function(p) { setAttr(p[0], t(p[1])); });
   setAttr("#sid-redo", t("sidRedo"));
   ["#sid-metronome", "#sid-roll-metronome", "#sid-vkbd-metronome"].forEach(sel => setAttr(sel, t("sidMetronome")));
   setAttr("#sid-roll .sid-roll-voices", t("sidRollVoice"));

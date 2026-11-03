@@ -179,6 +179,7 @@
             <button id="sid-new-tune" type="button">New tune</button>
             <button id="sid-load-bin" type="button">Load .bin…</button>
             <button id="sid-save-bin" type="button">Save .bin…</button>
+            <button id="sid-inst-unused" type="button">Delete unused instruments</button>
             <button id="sid-import-goat" type="button">Import GoatTracker .sng…</button>
             <button id="sid-import-sid" type="button">Import .sid…</button>
             <div class="ed-file-sep"></div>
@@ -201,6 +202,7 @@
           <span class="sid-lbl">INSTRUMENT</span>
           <select id="sid-inst-sel" class="sid-select"></select>
           <button id="sid-inst-add" class="sid-mini-btn" type="button" aria-label="Add instrument">+</button>
+          <button id="sid-inst-del" class="sid-mini-btn" type="button" aria-label="Delete instrument">−</button>
           <input id="sid-inst-name" class="sid-input" type="text" value="New Sound">
           <button id="sid-preview" class="ce-tool-btn" type="button" aria-label="Preview">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3v6.6a2.4 2.4 0 1 1-1.2-2.08V4.5L7 5.2V11a2.4 2.4 0 1 1-1.2-2.08V4.2z" fill="currentColor"/></svg>
@@ -263,7 +265,6 @@
               <div class="sid-slider-row"><span class="sid-sl-lbl" id="sid-cut-lbl">Cut:</span><input type="range" id="sid-cut" min="0" max="2047" value="1400" class="sid-range"><span id="sid-cut-val" class="sid-num sid-num--w">1400</span></div>
               <div class="sid-slider-row"><span class="sid-sl-lbl" id="sid-cut-speed-lbl">Sweep:</span><input type="range" id="sid-cut-speed" min="0" max="127" value="0" class="sid-range"><span id="sid-cut-speed-val" class="sid-num sid-num--w">0</span>
                 <label class="sid-check sid-check--mini" id="sid-cut-ping-wrap"><input type="checkbox" id="sid-cut-ping"> <span id="sid-cut-ping-lbl">Ping-pong</span></label></div>
-              <div class="sid-slider-row"><span class="sid-sl-lbl" id="sid-vol-lbl">Vol:</span><input type="range" id="sid-vol" min="0" max="15" value="15" class="sid-range"><span id="sid-vol-val" class="sid-num sid-num--w">15</span></div>
             </div>
             <div class="sid-filter-col sid-filter-col--sep">
               <div class="sid-slider-row"><span class="sid-sl-lbl" id="sid-cut-end-lbl">End:</span><input type="range" id="sid-cut-end" min="0" max="2047" value="1400" class="sid-range"><span id="sid-cut-end-val" class="sid-num sid-num--w">1400</span></div>
@@ -345,16 +346,20 @@
           <span class="sid-mini-lbl" id="sid-chip-lbl">SID:</span>
           <select id="sid-chip-count" class="sid-select"><option value="1">1</option><option value="2">2</option></select>
           <select id="sid-chip-addr" class="sid-select" hidden></select>
-          <span class="sid-mini-lbl">Speed:</span>
+          <span class="sid-tb-group"><span class="sid-mini-lbl">Speed:</span>
           <button id="sid-speed-down" class="sid-mini-btn" type="button" aria-label="Speed down">−</button>
           <input id="sid-speed" class="sid-input sid-speed" type="number" min="1" max="255" value="6">
-          <button id="sid-speed-up" class="sid-mini-btn" type="button" aria-label="Speed up">+</button>
+          <button id="sid-speed-up" class="sid-mini-btn" type="button" aria-label="Speed up">+</button></span>
           <span class="sid-bpm-wrap"><span class="sid-mini-lbl" id="sid-bpm-lbl">BPM:</span>
           <span id="sid-bpm" class="sid-num" aria-label="Beats per minute (4 rows per beat)">125</span></span>
-          <span class="sid-mini-lbl">Oct:</span>
+          <span class="sid-tb-sep" aria-hidden="true"></span>
+          <select id="sid-video" class="sid-select sid-video" aria-label="Timing: a PAL (50 Hz) or NTSC (60 Hz) machine — the frame rate, the note table and the BPM follow it"><option value="pal">PAL</option><option value="ntsc">NTSC</option></select>
+          <span class="sid-tb-group"><span class="sid-mini-lbl" id="sid-song-vol-lbl">Vol:</span>
+          <input id="sid-song-vol" class="sid-range" type="range" min="0" max="15" value="15" aria-label="The tune's volume (0–15): the SID's master volume, for all three voices together"><span id="sid-song-vol-val" class="sid-num">15</span></span><span class="sid-tb-group" id="sid-song-vol2-group" hidden><span class="sid-mini-lbl" id="sid-song-vol2-lbl">SID 2:</span><input id="sid-song-vol2" class="sid-range" type="range" min="0" max="15" value="15" aria-label="The second SID's volume (0–15), for voices 4–6"><span id="sid-song-vol2-val" class="sid-num">15</span><span class="sid-tb-sep" aria-hidden="true"></span></span>
+          <span class="sid-tb-group"><span class="sid-mini-lbl">Oct:</span>
           <button id="sid-oct-down" class="sid-mini-btn" type="button" aria-label="Octave down">−</button>
           <span id="sid-oct-val" class="sid-num">4</span>
-          <button id="sid-oct-up" class="sid-mini-btn" type="button" aria-label="Octave up">+</button>
+          <button id="sid-oct-up" class="sid-mini-btn" type="button" aria-label="Octave up">+</button></span>
           <button id="sid-row-preview" class="ce-tool-btn" type="button" aria-label="Preview row">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6v4h3l4 3V3L6 6H3z"/><path d="M12 6a3 3 0 010 4"/></svg>
           </button>
@@ -389,6 +394,10 @@
             <span class="sid-lcd-cell"><i id="sid-lcd-row-lbl">ROW</i><b id="sid-lcd-row">00</b></span>
             <span class="sid-lcd-cell"><i id="sid-lcd-time-lbl">TIME</i><b id="sid-lcd-time">0:00.0</b></span>
           </div>
+          <span class="sid-tb-break" aria-hidden="true"></span>
+          <span class="sid-mini-lbl" id="sid-quantize-lbl">Quantize:</span>
+          <select id="sid-quantize" class="sid-select sid-quantize" aria-label="The quantize grid in rows: Q in the horizontal tracker moves the selected notes onto it, and with »On record« on, the notes of a recording when it stops"><option value="2">2 rows</option><option value="4" selected>4 rows</option><option value="8">8 rows</option><option value="16">16 rows</option></select>
+          <label class="me-check sid-quantize-rec"><input type="checkbox" id="sid-quantize-rec"> <span id="sid-quantize-rec-label">On record</span></label>
           <span class="sid-tb-sep" aria-hidden="true"></span>
           <button id="sid-record" class="ce-tool-btn sid-record-btn" type="button" aria-label="Record" aria-pressed="false">
             <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.3" fill="currentColor"/></svg>
@@ -506,6 +515,19 @@
         <div class="sid-roll-tools">
           <button id="sid-roll-vzoom-out" class="ce-tool-btn" type="button" aria-label="Zoom out vertically"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5v4M6 3.5l2 2 2-2M8 14.5v-4M6 12.5l2-2 2 2M4 8h8"/></svg></button>
           <button id="sid-roll-vzoom-in" class="ce-tool-btn" type="button" aria-label="Zoom in vertically"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5.5v-4M6 3.5l2-2 2 2M8 10.5v4M6 12.5l2 2 2-2M4 8h8"/></svg></button>
+        </div>
+        <div class="sid-roll-tools">
+          <button id="sid-roll-undo" class="ce-tool-btn" type="button" aria-label="Undo (Ctrl+Z)" disabled>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5L3 6.5l3 3"/><path d="M3 6.5h6.5a3.5 3.5 0 0 1 0 7H7"/></svg>
+          </button>
+          <button id="sid-roll-redo" class="ce-tool-btn" type="button" aria-label="Redo (Ctrl+Y)" disabled>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5l3 3-3 3"/><path d="M13 6.5H6.5a3.5 3.5 0 0 0 0 7H9"/></svg>
+          </button>
+          <button id="sid-roll-cut" class="ce-tool-btn" type="button" aria-label="Cut (Ctrl+X)" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4.5" cy="12" r="2"/><circle cx="11.5" cy="12" r="2"/><path d="M6 10.5L12 2.5M10 10.5L4 2.5"/></svg></button>
+          <button id="sid-roll-copy" class="ce-tool-btn" type="button" aria-label="Copy (Ctrl+C)" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg></button>
+          <button id="sid-roll-paste" class="ce-tool-btn" type="button" aria-label="Paste at the mouse or the cursor (Ctrl+V)" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3" width="9" height="11" rx="1"/><path d="M6 3V2h4v1"/><path d="M6 7h4M6 9.5h4"/></svg></button>
+          <button id="sid-roll-delete" class="ce-tool-btn" type="button" aria-label="Delete (Del)" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/></svg></button>
+          <button id="sid-roll-quantize" class="ce-tool-btn" type="button" aria-label="Quantize selected (Q)" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5v11M8 2.5v11M13.5 2.5v11" stroke-dasharray="1.5 1.5"/><rect x="3.5" y="6.5" width="4" height="3" fill="currentColor" stroke="none"/></svg></button>
         </div>
         <span id="sid-roll-inst" class="sid-roll-inst"></span>
         <button id="sid-roll-close" class="sid-xbtn sid-trk-attach" type="button" aria-label="Close">×</button>
