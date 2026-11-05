@@ -23,6 +23,13 @@ npm test        # JS engine tests; Rust: cargo test in src-tauri
 The `Build installers` GitHub Actions workflow builds the Windows and macOS (x64, ARM64) and the Linux (x64)
 installers; start it from the Actions tab or push a `v*` tag.
 
+The macOS app is not signed with an Apple Developer ID or notarized (ad-hoc signature only), so macOS quarantines
+the download and may refuse to open it. After copying it to Applications, run once:
+
+```
+xattr -cr "/Applications/VA SID Studio.app"
+```
+
 `www/sid-editor.js` is the SID code of the Visual Assembler's `www/app.js`. The player is assembled by the
 [VMA](https://github.com/zstarczali/VMA) crate. The C64 emulation in `src-tauri/src/c64` and `mos6510.rs` is a
 port of VICE (GPLv2+). License: GPLv3, see `LICENSE`.
