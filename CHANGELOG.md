@@ -6,6 +6,12 @@
 - Top 50: a star button in the HVSC and the Modland panel lists the 50 most popular C64 tunes and 50 Amiga tunes, the way Random lists random ones. The lists come from Remix64: its statistics of the most remixed SID files and its C64 and Amiga remix charts (the originals most often remixed there).
 - Normalize volume: a new SID Player button plays every tune, SID or module, at about the same loudness (raised or lowered towards one level, by at most 12 dB, without clipping). A module is measured whole when it opens; a SID tune on its first two seconds, then the level follows it slowly.
 - Horizontal tracker: the Paste button pastes at a yellow marker (the last click, or a click on the ruler), which moves past each paste; Ctrl+V pastes at the row under the mouse. Ctrl+V and the other keys also work after a click on a header button.
+- Check for update: a new toolbar button, and a check at every start. A new version downloads and installs from the app, which then restarts; Skip this version stops the question at start (the button stays lit). The server can be changed in Settings.
+- Christmas theme, offered in December only: night blue, pine green and white, with every button and accent in an ornament's colour. Afterwards the app goes back to the theme you had before.
+- Exit: a new toolbar button saves the tune and the playlist, then closes the app.
+- Playlist name: the name of the `.sidpl` file you opened or saved shows above the list, and saving offers it as the file name.
+- The window's title follows what plays: MOD Player for a module, SID Player for a SID tune; when nothing plays, MOD Player with the Modland panel open.
+- About: the module player's license (libopenmpt, BSD-3-Clause).
 
 ## 1.3.3 - 2026-11-03
 

@@ -7,6 +7,7 @@ mod mos6510;
 mod sid_chip;
 mod sid_core;
 mod sid_file;
+mod updater;
 
 use base64::Engine;
 use serde::Deserialize;
@@ -464,6 +465,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updater::check_for_update,
+            updater::download_and_install_update,
+            updater::get_update_server,
+            updater::set_update_server,
             render_sid_preview,
             release_sid_preview,
             render_sid_file,

@@ -1,0 +1,8 @@
+The Commodore C= logo on the gifts of the Christmas background (www/xmas.js, drawLogoTag):
+
+  "Commodore C= logo" by Alien426, Wikimedia Commons, 2018
+  https://commons.wikimedia.org/wiki/File:Commodore_C%3D_logo.svg
+  License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+  Changes: the shapes are drawn as canvas paths, on a white round tag.
+
+The logo itself may be a trademark of its owner; the license above covers this drawing only.

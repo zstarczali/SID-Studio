@@ -3501,6 +3501,13 @@ let _sidShuffle = false;
 
 let _sidShuffleHistory = [];
 
+// The name of the .sidpl file the list was opened from or saved to, shown above the list.
+var _sidPlaylistName = "";
+
+function _sidPlaylistBaseName(name) {
+  return String(name || "").replace(/^.*[\\/]/, "").replace(/\.sidpl$/i, "");
+}
+
 let _sidSeekDragging = false;
 
 function _sidPsidInfo(bytes) {
@@ -3666,6 +3673,7 @@ function _sidPlayerClear() {
   _sidPlaylistIndex = -1;
   _sidShuffleHistory = [];
   _sidExtFile = null;
+  _sidPlaylistName = "";
   _sidPlayerRenderList();
   _sidPlayerPersist();
 }
@@ -3788,6 +3796,11 @@ function _sidPlayerRenderList() {
   if (songNext) songNext.disabled = !current || current.song >= current.info.songs;
   const hint = document.getElementById("websid-play-drop-hint");
   if (hint) hint.hidden = _sidPlaylist.length > 0;
+  const listName = document.getElementById("websid-play-list-name");
+  if (listName) {
+    listName.hidden = !_sidPlaylistName;
+    listName.textContent = _sidPlaylistName ? tf("sidPlayerListName", { name: _sidPlaylistName }) : "";
+  }
   _sidPlayerTickUi();
 }
 
@@ -3883,6 +3896,7 @@ function _sidPlayerLoadPlaylist(json, sourceName) {
   const list = _sidPlaylistFromJson(json);
   if (!list) { showViceToast(tf("sidPlayerBadPlaylist", { name: sourceName }), true); return false; }
   _sidPlayerClear();
+  _sidPlaylistName = _sidPlaylistBaseName(sourceName);
   _sidPlayerAdd(list.entries, false, Math.min(list.current, list.entries.length - 1));
   return true;
 }
@@ -3892,8 +3906,15 @@ async function _sidPlayerSavePlaylist() {
   const text = JSON.stringify(_sidPlaylistToJson(), null, 1);
   const bytes = Array.from(new TextEncoder().encode(text));
   if (window.electronAPI?.saveBin) {
-    const res = await window.electronAPI.saveBin({ bytes, fileName: "playlist.sidpl" });
-    if (res?.ok) showViceToast(t("sidPlayerSaved"));
+    const res = await window.electronAPI.saveBin({ bytes, fileName: (_sidPlaylistName || "playlist") + ".sidpl" });
+    if (res?.ok) {
+      if (res.filePath) {
+        _sidPlaylistName = _sidPlaylistBaseName(res.filePath);
+        _sidPlayerRenderList();
+        _sidPlayerPersist();
+      }
+      showViceToast(t("sidPlayerSaved"));
+    }
     else if (res && !res.canceled) showViceToast(res.error || t("sidPlayerSaveFailed"), true);
     return;
   }
@@ -3904,6 +3925,15 @@ async function _sidPlayerSavePlaylist() {
   setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
 }
 
+// The toolbar's Exit button: the tune and the playlist are saved first, so no question is needed.
+function _appExit() {
+  try { _sidAutosave(); } catch (_) {}
+  try { _sidPlayerPersist(); } catch (_) {}
+  const win = window.__TAURI__?.window?.getCurrentWindow?.();
+  if (win) win.close();
+  else window.close();
+}
+
 function _sidPlayerPersist() {
   const open = !!document.getElementById("websid-play-dialog")?.open;
   // too much for localStorage: the dropped modules' bytes go first, then the whole list (the window state stays)
@@ -3912,6 +3942,7 @@ function _sidPlayerPersist() {
       const state = storage ? _sidPlaylistToJson(storage) : {};
       state.open = open;
       state.shuffle = _sidShuffle;
+    state.name = _sidPlaylistName || undefined;
       localStorage.setItem(_SID_PLAYER_STORE, JSON.stringify(state));
       return;
     } catch (_) {}
@@ -3930,6 +3961,7 @@ function _sidPlayerRestore() {
     });
     _sidPlaylistIndex = _sidPlaylist.length ? Math.max(0, Math.min(list.current, _sidPlaylist.length - 1)) : -1;
   }
+  if (typeof saved.name === "string") _sidPlaylistName = saved.name;
   if (saved.shuffle) _sidPlayerSetShuffle(true);
   if (saved.open) _sidPlayerShow();
   else _sidPlayerRenderList();
@@ -8887,6 +8919,17 @@ _confirmNo?.addEventListener("click",  () => { _confirmDialog?.close(); _confirm
 
 _confirmDialog?.addEventListener("cancel", () => { _confirmResolve?.(false); });
 
+// The Christmas theme is offered in December only; after it the head script of index.html
+// goes back to the theme it replaced.
+function _isChristmasThemeDay(date = new Date()) {
+  return date.getMonth() === 11;
+}
+
+function _christmasThemeSync() {
+  const option = document.querySelector('.theme-option[data-theme-opt="christmas"]');
+  if (option) option.hidden = !_isChristmasThemeDay();
+}
+
 function _themeSyncPicker() {
   const current = document.documentElement.dataset.theme;
   document.querySelectorAll(".theme-option").forEach((btn) => {
@@ -8895,6 +8938,8 @@ function _themeSyncPicker() {
   });
 }
 function setTheme(theme) {
+  const previous = document.documentElement.dataset.theme;
+  if (theme === "christmas" && previous && previous !== "christmas") localStorage.setItem("c64-block-theme-before-christmas", previous);
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("c64-block-theme", theme);
   _themeSyncPicker();
@@ -8902,6 +8947,8 @@ function setTheme(theme) {
   if (_sidInited) _sidDrawADSR();
 }
 function _setupThemePicker() {
+  _christmasThemeSync();
+  document.getElementById("theme-picker")?.addEventListener("toggle", _christmasThemeSync);
   document.querySelectorAll(".theme-option").forEach(btn => {
     btn.addEventListener("click", () => {
       setTheme(btn.dataset.themeOpt);
@@ -9208,6 +9255,7 @@ function _sidApplyTranslations() {
   });
   setText('.theme-option[data-theme-opt="light"] span:not(.theme-option-dot)', t("themeLight"));
   setText('.theme-option[data-theme-opt="dark"] span:not(.theme-option-dot)', t("themeDark"));
+  setText('.theme-option[data-theme-opt="christmas"] span:not(.theme-option-dot)', t("themeChristmas"));
   setAttr("#sid-editor-btn", t("sidEditorBtn"));
   setAttr("#app-new-tune-btn", t("sidNewTune"));
   ["new-program-cancel", "sample-cancel", "sid-import-sid-cancel"].forEach(id => setText("#" + id, t("cancel")));
@@ -9240,6 +9288,11 @@ function _sidApplyTranslations() {
   setAttr("#app-settings-btn", t("appSettings"));
   setAttr("#app-manual-btn", t("appManual"));
   setAttr("#app-about-btn", t("about"));
+  _updateSyncButton();
+  setText("#update-server-lbl", t("updateServerLabel"));
+  setText("#update-server-default", t("updateServerDefault"));
+  setAttr("#app-exit-btn", t("appExit"));
+  setAttr("#xmas-toggle-btn", t("xmasToggle"));
   const aboutDesc = document.getElementById("about-desc");
   aboutDesc.replaceChildren();
   t("aboutDescText").split("\n").forEach((line, i) => {
@@ -9328,10 +9381,199 @@ function _setupSplash() {
   setTimeout(hide, 8000);
 }
 
+// ── Self-update: the installers are on the VA server (Rust: updater.rs, PHP: downloads/SIDS/index.php) ──
+const _UPDATE_SKIP_KEY = "va-sid-studio-update-skip-version";
+let _updateBusy = false;
+let _updateInfo = null;
+
+function _updateEls() {
+  const $ = id => document.getElementById(id);
+  return {
+    dlg: $("update-dialog"), title: $("update-title"), msg: $("update-msg"),
+    wrap: $("update-progress-wrap"), bar: $("update-progress-bar"), text: $("update-progress-text"),
+    skip: $("update-skip"), close: $("update-close"), install: $("update-install")
+  };
+}
+
+// state: null = hidden, -1 = indeterminate (animated), 0..100 = percent
+function _updateSetProgress(state, label = "") {
+  const { wrap, bar, text } = _updateEls();
+  if (!wrap || !bar) return;
+  wrap.hidden = state === null;
+  bar.classList.toggle("update-progress-bar--indeterminate", state === -1);
+  bar.style.width = state >= 0 ? `${state}%` : "";
+  if (text) text.textContent = label;
+}
+
+function _updateShow({ title, msg, install = false, skip = false, closeLabel = t("updateClose") }) {
+  const els = _updateEls();
+  if (!els.dlg) return;
+  els.title.textContent = title;
+  els.msg.textContent = msg;
+  els.install.hidden = !install;
+  els.install.textContent = t("updateInstallNow");
+  els.skip.hidden = !skip;
+  els.skip.textContent = t("updateSkipVersion");
+  els.close.textContent = closeLabel;
+  els.close.disabled = false;
+  if (!els.dlg.open) els.dlg.showModal();
+}
+
+// "1.4.1" or, for a re-released build of the same version, "1.4.1 hotfix".
+function _updateLatestLabel(info) {
+  return info.hotfix > 0 ? `${info.latestVersion} ${t("updateHotfix")}` : info.latestVersion;
+}
+
+// What "Skip this version" remembers: a later hotfix of a skipped version is offered again.
+function _updateSkipId(info) {
+  return info.hotfix > 0 ? `${info.latestVersion}+hotfix${info.hotfix}` : info.latestVersion;
+}
+
+// The toolbar button stays lit while an update is waiting, even a skipped one.
+function _updateSyncButton() {
+  const btn = document.getElementById("app-update-btn");
+  if (!btn) return;
+  const available = !!(_updateInfo?.supported && _updateInfo.updateAvailable);
+  btn.classList.toggle("main-tb-btn--active", available);
+  btn.setAttribute("aria-label", available
+    ? tf("updateStatusAvailable", { latest: _updateLatestLabel(_updateInfo) })
+    : t("checkForUpdate"));
+}
+
+function _updateShowAvailable() {
+  const info = _updateInfo;
+  if (!info?.updateAvailable) return;
+  _updateShow({
+    title: t("updateAvailableTitle"),
+    msg: info.hotfix > 0
+      ? tf("updateHotfixMsg", { version: info.latestVersion })
+      : tf("updateAvailableMsg", { latest: info.latestVersion, current: info.currentVersion }),
+    install: true,
+    skip: true,
+    closeLabel: t("updateLater")
+  });
+}
+
+async function checkForAppUpdate({ silent = false } = {}) {
+  if (_updateBusy || !window.electronAPI?.checkForUpdate) return;
+  if (!silent) {
+    _updateShow({ title: t("checkForUpdate"), msg: t("updateChecking") });
+    _updateSetProgress(-1);
+  }
+  _updateBusy = true;
+  let info;
+  try {
+    info = await window.electronAPI.checkForUpdate();
+  } catch (err) {
+    if (!silent) {
+      _updateSetProgress(null);
+      _updateShow({ title: t("checkForUpdate"), msg: tf("updateCheckFailed", { error: String(err?.message || err) }) });
+    }
+    return;
+  } finally {
+    _updateBusy = false;
+  }
+  _updateInfo = info;
+  _updateSetProgress(null);
+  _updateSyncButton();
+
+  if (!info?.supported) {
+    if (!silent) _updateShow({ title: t("checkForUpdate"), msg: t("updateUnsupported") });
+    return;
+  }
+  if (!info.updateAvailable) {
+    if (!silent) _updateShow({ title: t("checkForUpdate"), msg: tf("updateUpToDate", { version: info.currentVersion }) });
+    return;
+  }
+  let skipped = "";
+  try { skipped = localStorage.getItem(_UPDATE_SKIP_KEY) || ""; } catch (_) {}
+  if (silent && skipped === _updateSkipId(info)) return;
+  _updateShowAvailable();
+}
+
+async function _updateInstall() {
+  const version = _updateInfo?.latestVersion;
+  if (_updateBusy || !version || !_updateInfo.updateAvailable) return;
+  // the app closes for the installer: the tune and the playlist are saved first, as on Exit
+  try { _sidAutosave(); } catch (_) {}
+  try { _sidPlayerPersist(); } catch (_) {}
+
+  const els = _updateEls();
+  _updateBusy = true;
+  els.install.hidden = true;
+  els.skip.hidden = true;
+  els.close.disabled = true;
+  els.msg.textContent = tf("updateDownloading", { version: _updateLatestLabel(_updateInfo) });
+  _updateSetProgress(-1);
+
+  let unlisten = null;
+  try {
+    unlisten = await window.electronAPI.onUpdateProgress?.(({ received, total }) => {
+      const mb = n => (n / 1048576).toFixed(1);
+      if (total > 0) _updateSetProgress(Math.min(100, Math.round(received * 100 / total)), `${mb(received)} / ${mb(total)} MB`);
+      else _updateSetProgress(-1, `${mb(received)} MB`);
+    });
+  } catch (_) { /* it works without progress too */ }
+
+  try {
+    const res = await window.electronAPI.downloadAndInstallUpdate(version, _updateInfo.hotfix || 0);
+    _updateSetProgress(100, "");
+    els.msg.textContent = res?.restarting ? t("updateRestarting") : t("updateInstallerOpened");
+  } catch (err) {
+    _updateSetProgress(null);
+    els.msg.textContent = tf("updateFailed", { error: String(err?.message || err) });
+    els.install.hidden = false;
+  } finally {
+    unlisten?.();
+    _updateBusy = false;
+    els.close.disabled = false;
+  }
+}
+
+// Settings: the installers are read from <server>downloads/SIDS/.
+async function _updateLoadServer() {
+  const input = document.getElementById("update-server");
+  const status = document.getElementById("update-server-status");
+  if (!input) return;
+  if (!window.electronAPI?.getUpdateServer) { input.disabled = true; return; }
+  let cfg = null;
+  try { cfg = await window.electronAPI.getUpdateServer(); } catch (_) { cfg = null; }
+  input.placeholder = cfg?.default || "https://www.c64va.pro/";
+  input.value = cfg?.updateServer || input.placeholder;
+  if (status) status.textContent = tf("updateServerNote", { server: cfg?.effective || input.placeholder });
+}
+
+async function _updateSaveServer(url) {
+  const status = document.getElementById("update-server-status");
+  try {
+    await window.electronAPI?.setUpdateServer?.(url);
+    await _updateLoadServer();
+  } catch (err) {
+    if (status) status.textContent = String(err?.message || err);
+  }
+}
+
+function _setupUpdater() {
+  const els = _updateEls();
+  document.getElementById("app-update-btn")?.addEventListener("click", () => checkForAppUpdate());
+  els.install?.addEventListener("click", _updateInstall);
+  els.close?.addEventListener("click", () => { if (!_updateBusy) els.dlg?.close(); });
+  els.skip?.addEventListener("click", () => {
+    try { if (_updateInfo?.latestVersion) localStorage.setItem(_UPDATE_SKIP_KEY, _updateSkipId(_updateInfo)); } catch (_) {}
+    els.dlg?.close();
+  });
+  els.dlg?.addEventListener("cancel", e => { if (_updateBusy) e.preventDefault(); });
+  const server = document.getElementById("update-server");
+  server?.addEventListener("change", () => _updateSaveServer(server.value));
+  server?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); server.blur(); } });
+  document.getElementById("update-server-default")?.addEventListener("click", () => _updateSaveServer(""));
+  setTimeout(() => checkForAppUpdate({ silent: true }), 6000);
+}
+
 function _setupAppSettings() {
   const dialog = document.getElementById("app-settings-dialog");
   const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
-  on("app-settings-btn", "click", () => dialog.showModal());
+  on("app-settings-btn", "click", () => { _updateLoadServer(); dialog.showModal(); });
   on("app-settings-close", "click", () => dialog.close());
   on("app-manual-btn", "click", async () => {
     try {
@@ -9393,6 +9635,7 @@ function _setupAbout() {
     window.electronAPI?.openExternal(a.href);
   }));
   closeBtn.addEventListener("click", () => dialog.close());
+  document.getElementById("app-exit-btn")?.addEventListener("click", _appExit);
   document.getElementById("app-about-btn").addEventListener("click", async () => {
     const [version, vmaVersion] = await Promise.all([
       Promise.resolve(window.__TAURI__?.app?.getVersion?.()).catch(() => null),
@@ -9416,6 +9659,7 @@ setupSidEditor();
 setupDraggableEditorDialogs();
 setupDialogStacking();
 _setupAppSettings();
+_setupUpdater();
 _setupAbout();
 _setupAppContextMenu();
 _setupThemePicker();

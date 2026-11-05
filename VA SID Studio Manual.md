@@ -41,10 +41,12 @@ The app is an empty workspace with a toolbar of icon buttons. Everything else fl
 | **SID Player** | Opens or closes the [SID Player](#2-sid-player). |
 | **SID Editor** | Opens or closes the [SID Editor](#5-sid-editor-overview). |
 | **New tune** | Opens the SID Editor and starts an empty tune, after asking first. |
-| **Toggle theme** | Chooses one of 8 themes: Light, Dark, OLED, Black, Commodore 77, Commodore Starlight, Commodore Beige and Commodore 64. |
+| **Toggle theme** | Chooses one of 8 themes: Light, Dark, OLED, Black, Commodore 77, Commodore Starlight, Commodore Beige and Commodore 64. In December a ninth is offered, Christmas; after that the app goes back to the theme you had before. |
 | **Settings** | Opens the [Settings](#16-settings). |
 | **Manual** | Opens this manual as a PDF, in your system's PDF viewer. |
+| **Check for update** | Looks for a new version, and downloads and installs it if you agree. The app restarts afterwards. It also looks at every start; **Skip this version** stops the question, the button stays lit. |
 | **About** | Shows the version, the links and the license. |
+| **Exit** | Saves the tune and the playlist, then closes the app. |
 
 **To listen to a tune:** open the SID Player, press **+** and choose a `.sid` file, then click the tune in the list.
 
