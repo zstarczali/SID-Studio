@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VA SID Studio</title>
-  <script>(function(){var t=localStorage.getItem('c64-block-theme')||'dark';document.documentElement.dataset.theme=t;document.documentElement.style.background={'dark':'#1a1b26','oled':'#0d0d12','black':'#000000','commodore77':'#0a0a08','starlight':'#f4f1fa','beige':'#e4ddd0','c64':'#7869c4','light':'#e8ecf1'}[t]||'#1a1b26';})();</script>
+  <script>(function(){var t=localStorage.getItem('c64-block-theme')||'dark',d=new Date();if(t==='christmas'&&d.getMonth()!==11){t=localStorage.getItem('c64-block-theme-before-christmas')||'dark';localStorage.setItem('c64-block-theme',t);}document.documentElement.dataset.theme=t;document.documentElement.style.background={'dark':'#1a1b26','oled':'#0d0d12','black':'#000000','commodore77':'#0a0a08','starlight':'#f4f1fa','beige':'#e4ddd0','c64':'#7869c4','christmas':'#0b2a5b','light':'#e8ecf1'}[t]||'#1a1b26';})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,11 +68,18 @@
                       <span class="theme-option-dot" data-theme-opt="c64" aria-hidden="true"></span>
                       <span>Commodore 64</span>
                     </button>
+                    <button class="secondary theme-option" data-theme-opt="christmas" type="button" hidden>
+                      <span class="theme-option-dot" data-theme-opt="christmas" aria-hidden="true"></span>
+                      <span>Christmas</span>
+                    </button>
                   </div>
                 </details>
     <button id="app-settings-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/></svg></button>
     <button id="app-manual-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="Manual"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.2C6.8 3.2 5 2.8 2 2.8v9.6c3 0 4.8.4 6 1.4 1.2-1 3-1.4 6-1.4V2.8c-3 0-4.8.4-6 1.4z"/><path d="M8 4.2v9.6"/></svg></button>
+    <button id="app-update-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="Check for update"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8M4.8 7 8 10.2 11.2 7M2.5 13.5h11"/></svg></button>
     <button id="app-about-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="About"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.3"/><path d="M8 7.2v4"/><circle cx="8" cy="4.9" r="0.5" fill="currentColor"/></svg></button>
+    <button id="xmas-toggle-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="Christmas tree on / off" aria-pressed="false" hidden><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5 5 5.5h1.5L4 9h1.5L3 12.5h10L10.5 9H12L9.5 5.5H11zM8 12.5v2"/></svg></button>
+    <button id="app-exit-btn" class="main-tb-btn main-tb-icon-btn" type="button" aria-label="Exit"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2.5h-3v11h3M10 5l3 3-3 3M13 8H6.5"/></svg></button>
   </header>
 
   <dialog id="websid-play-dialog" class="websid-play-dialog websid-play-dialog--stopped" aria-labelledby="websid-play-title">
@@ -164,6 +171,7 @@
           <div class="websid-hvsc-status"><span id="websid-modland-status"></span><button id="websid-modland-link" class="websid-hvsc-link" type="button">modland.com</button></div>
           <ol id="websid-modland-list" class="websid-play-list websid-hvsc-list"></ol>
         </section>
+        <div id="websid-play-list-name" class="websid-play-list-name" hidden></div>
         <ol id="websid-play-list" class="websid-play-list"></ol>
         <div id="websid-play-drop-hint" class="websid-play-drop-hint">Drop .sid files here</div>
         <div class="websid-play-note" id="websid-play-note" hidden>
@@ -658,6 +666,22 @@
     </div>
   </dialog>
 
+  <dialog id="update-dialog" class="app-confirm-dialog update-dialog">
+    <div class="app-confirm-card">
+      <p id="update-title" class="app-confirm-msg update-title">Check for update</p>
+      <p id="update-msg" class="app-confirm-msg"></p>
+      <div id="update-progress-wrap" class="update-progress-wrap" hidden>
+        <div class="update-progress-track"><div id="update-progress-bar" class="update-progress-bar"></div></div>
+        <span id="update-progress-text" class="update-progress-text"></span>
+      </div>
+      <div class="app-confirm-buttons">
+        <button id="update-skip" class="secondary" type="button" hidden>Skip</button>
+        <button id="update-close" class="secondary" type="button">Close</button>
+        <button id="update-install" class="primary" type="button" hidden>Update</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="app-settings-dialog" class="app-confirm-dialog">
     <div class="app-confirm-card app-settings-card">
       <p id="app-settings-title" class="app-confirm-msg">Settings</p>
@@ -674,6 +698,10 @@
         <select id="sid-lcd-color" class="sid-select"><option value="green">Green</option><option value="red">Red</option></select></label>
       <label class="app-settings-row"><span id="sid-player-buffer-lbl">SID Player buffer</span>
         <select id="sid-player-buffer" class="sid-select"><option value="2048">10 s</option><option value="4096">15 s</option><option value="8192">20 s</option><option value="16384">30 s</option></select></label>
+      <label class="app-settings-row"><span id="update-server-lbl">Update server</span>
+        <input id="update-server" class="update-server-input" type="text" spellcheck="false" autocomplete="off"></label>
+      <div class="app-settings-row"><span id="update-server-status" class="update-server-status"></span>
+        <button id="update-server-default" class="secondary" type="button">Default</button></div>
       <div class="app-confirm-buttons"><button id="app-settings-close" class="primary" type="button">OK</button></div>
     </div>
   </dialog>
@@ -723,5 +751,6 @@
   <script src="tauri-bridge.js"></script>
   <script src="i18n.js"></script>
   <script src="sid-editor.js"></script>
+  <script src="xmas.js"></script>
 </body>
 </html>
