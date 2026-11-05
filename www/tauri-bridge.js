@@ -16,6 +16,8 @@
     hvscChooseFolder: () => invoke("hvsc_choose_folder"),
     hvscDownloadAll: () => invoke("hvsc_download_all"),
     hvscCancelDownload: () => invoke("hvsc_cancel_download"),
+    modlandCatalog: (refresh) => invoke("modland_catalog", { refresh: !!refresh }),
+    modlandFetch: (path) => invoke("modland_fetch", { path }),
     releaseSidFile: (sessionId) => invoke("release_sid_file", { sessionId }),
     renderSidFile: (payload) => invoke("render_sid_file", { payload }),
     sidFileInfo: (sessionId) => invoke("sid_file_info", { sessionId }),

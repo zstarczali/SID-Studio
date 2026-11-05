@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 - 2026-11-05
+
+- Amiga and tracker modules in the SID Player: the new **Modland** panel searches the Modland collection (about 177,000 playable modules: Protracker, Soundtracker, OctaMED, Oktalyzer, Future Composer, Digibooster, Fasttracker 2, Screamtracker, Impulse Tracker and others) by title, composer or format, like the HVSC panel. Modules are downloaded one by one and cached. Dropped `.mod`, `.xm`, `.s3m`, `.it`, `.med` … files play too. The modules play with libopenmpt 0.8.10 (WebAssembly, in a worker); seeking, pausing, subsongs, the volume and the spectrum work as with SID tunes.
+- Top 50: a star button in the HVSC and the Modland panel lists the 50 most popular C64 tunes and 50 Amiga tunes, the way Random lists random ones. The lists come from Remix64: its statistics of the most remixed SID files and its C64 and Amiga remix charts (the originals most often remixed there).
+- Normalize volume: a new SID Player button plays every tune, SID or module, at about the same loudness (raised or lowered towards one level, by at most 12 dB, without clipping). A module is measured whole when it opens; a SID tune on its first two seconds, then the level follows it slowly.
+- Horizontal tracker: the Paste button pastes at a yellow marker (the last click, or a click on the ruler), which moves past each paste; Ctrl+V pastes at the row under the mouse. Ctrl+V and the other keys also work after a click on a header button.
+
 ## 1.3.3 - 2026-11-03
 
 - Horizontal tracker: select notes with a frame (Shift+drag) or Ctrl+click, then cut, copy, paste or delete them with the new header buttons or Ctrl+X / C / V and Del. A paste goes to the row under the mouse, or to the tracker cursor.

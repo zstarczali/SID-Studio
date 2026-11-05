@@ -233,6 +233,7 @@ function setupSidPlayer() {
   on("websid-play-prev", "click", _sidPlayerPrev);
   on("websid-play-next", "click", _sidPlayerNext);
   on("websid-play-shuffle", "click", function() { _sidPlayerSetShuffle(!_sidShuffle); });
+  on("websid-play-normalize", "click", function() { _playerSetNormalize(!_playerNormalize); });
   on("websid-play-song-prev", "click", function() { _sidPlayerSong(-1); });
   on("websid-play-song-next", "click", function() { _sidPlayerSong(1); });
   on("websid-play-rew", "click", function() { _sidExtSeek(_sidExtElapsedMs() - 10000); });
@@ -247,6 +248,7 @@ function setupSidPlayer() {
   on("websid-play-clear", "click", _sidPlayerClear);
   on("websid-play-hvsc", "click", function() { _hvscSetOpen(!_hvscOpen()); });
   on("websid-hvsc-random", "click", _hvscShowRandom);
+  on("websid-hvsc-classics", "click", _hvscShowClassics);
   on("websid-hvsc-add-all", "click", _hvscAddAll);
   on("websid-hvsc-refresh", "click", function() { _hvscLoad(true); });
   on("websid-hvsc-folder", "click", _hvscToggleFolder);
@@ -276,6 +278,32 @@ function setupSidPlayer() {
     if (!entry) return;
     if (e.target.closest(".websid-hvsc-item-save")) _hvscSaveEntry(entry);
     else _hvscAddEntry(entry, !e.target.closest(".websid-hvsc-item-add"));
+  });
+  on("websid-play-modland", "click", function() { _modlandSetOpen(!_modlandOpen()); });
+  on("websid-modland-random", "click", _modlandShowRandom);
+  on("websid-modland-classics", "click", _modlandShowClassics);
+  on("websid-modland-add-all", "click", _modlandAddAll);
+  on("websid-modland-refresh", "click", function() { _modlandLoad(true); });
+  on("websid-modland-link", "click", function() { window.electronAPI?.openExternal("https://ftp.modland.com/"); });
+  let modlandSearchTimer = null;
+  on("websid-modland-search", "input", function() {
+    clearTimeout(modlandSearchTimer);
+    modlandSearchTimer = setTimeout(_modlandRunSearch, 200);
+  });
+  on("websid-modland-field", "change", function() {
+    _modlandFieldSync();
+    _modlandRunSearch();
+    document.getElementById("websid-modland-search")?.focus();
+  });
+  on("websid-modland-search", "keydown", function(e) {
+    if (e.key === "Enter" && _modlandResults.length) { e.preventDefault(); _modlandAddEntry(_modlandResults[0], true); }
+  });
+  document.getElementById("websid-modland-list")?.addEventListener("click", function(e) {
+    const li = e.target.closest(".websid-hvsc-item");
+    const entry = li && _modlandResults[Number(li.dataset.index)];
+    if (!entry) return;
+    if (e.target.closest(".websid-hvsc-item-save")) _modlandSaveEntry(entry);
+    else _modlandAddEntry(entry, !e.target.closest(".websid-hvsc-item-add"));
   });
   _sidKnobBind(document.getElementById("websid-play-vol"),
     function() { return Math.round(_sidMasterVol * 100); },
@@ -344,8 +372,10 @@ function setupSidPlayer() {
   // runs before the _sidPlaylist state is declared (TDZ), so restore after the script has loaded
   setTimeout(function() {
     _sidLoadMasterVolume();
+    try { _playerSetNormalize(localStorage.getItem(_PLAYER_NORM_STORE) === "1"); } catch (_) {}
     _sidPlayerRestore();
     _hvscRestore();
+    _modlandRestore();
     setupSidVisualizer();
   }, 0);
 }
@@ -3344,6 +3374,7 @@ function _sidExtSetStatus(status) {
   }
   if (status !== "playing" && _sidExtTick) { clearInterval(_sidExtTick); _sidExtTick = null; }
   _sidExtRender();
+  _sidPlayerTitleSync();
 }
 
 async function _sidExtStartFile(bytes, filename, song = 0) {
@@ -3356,7 +3387,8 @@ async function _sidExtStartFile(bytes, filename, song = 0) {
   const seq = ++_sidExtStartSeq;
   _sidExtStarting = true;
   try {
-    return await _vaSidPlayFileBytes(bytes, filename, song);
+    // a PSID / RSID goes to the SID emulation, anything else to libopenmpt
+    return await (_sidPsidInfo(bytes) ? _vaSidPlayFileBytes : _modPlayFileBytes)(bytes, filename, song);
   } finally {
     if (seq === _sidExtStartSeq) _sidExtStarting = false;
   }
@@ -3420,7 +3452,7 @@ async function _sidExtSeek(ms) {
     while (_sidExtSeekTarget !== null) {
       const target = _sidExtSeekTarget;
       _sidExtSeekTarget = null;
-      if (_sidExternalCore) await _vaSidSeek(_sidExternalCore, target);
+      if (_sidExternalCore) await (_sidExternalCore.kind === "mod" ? _modSeek : _vaSidSeek)(_sidExternalCore, target);
       // the counter restarts at the target once its sound is there
       if (_sidExtSeekTarget === null && _sidExtStatus !== "stopped") showAt(target);
     }
@@ -3454,7 +3486,7 @@ let _sidPlayerEngineName = "";
 
 function _sidPlayerEngineLabel() {
   if (_sidExtStatus !== "stopped" && _sidPlayerEngineName) return _sidPlayerEngineName;
-  return _sidEngineLabel();
+  return _sidPlaylist[_sidPlaylistIndex]?.info?.module ? _modEngineLabel() : _sidEngineLabel();
 }
 
 const _SID_TUNE_LENGTH_MS = 180000;
@@ -3485,17 +3517,33 @@ function _sidPsidInfo(bytes) {
   return { title: str(0x16), author: str(0x36), released: str(0x56), songs, startSong };
 }
 
-// lengths: the subtune lengths in ms (from HVSC), hvsc: the tune's HVSC path
+// lengths: the subtune lengths in ms (from HVSC, or from libopenmpt once a module
+// has played), hvsc: the tune's HVSC path, modland: the module's Modland path
+// (a Modland entry may have no bytes yet: they come from the cache when it plays)
 function _sidPlayerItem(entry, info) {
   const lengths = Array.isArray(entry.lengths) && entry.lengths.every(function(ms) { return Number.isFinite(ms) && ms >= 0; }) ? entry.lengths : null;
-  return { id: crypto.randomUUID(), name: entry.name, bytes: entry.bytes, info, song: _sidValidSong(entry.song, info), fav: !!entry.fav,
-    lengths, hvsc: typeof entry.hvsc === "string" ? entry.hvsc : null };
+  return { id: crypto.randomUUID(), name: entry.name, bytes: entry.bytes || null, info, song: _sidValidSong(entry.song, info), fav: !!entry.fav,
+    lengths, hvsc: typeof entry.hvsc === "string" ? entry.hvsc : null, modland: typeof entry.modland === "string" ? entry.modland : null };
+}
+
+// A SID tune's header, or a module's info from its name; null if it is neither.
+function _sidEntryInfo(entry) {
+  if (entry.bytes) {
+    const psid = _sidPsidInfo(entry.bytes);
+    if (psid) return psid;
+  }
+  if (entry.modland || _sidIsModuleName(entry.name)) {
+    const info = _sidModInfo(entry);
+    if (entry.songs > 1) info.songs = entry.songs;
+    return info;
+  }
+  return null;
 }
 
 function _sidPlayerAdd(entries, playFirst, startIndex = 0) {
   const added = [];
   entries.forEach(function(entry) {
-    const info = _sidPsidInfo(entry.bytes);
+    const info = _sidEntryInfo(entry);
     if (!info) { showViceToast(tf("sidPlayerNotSid", { name: entry.name }), true); return; }
     const item = _sidPlayerItem(entry, info);
     _sidPlaylist.push(item);
@@ -3529,7 +3577,16 @@ function _sidPlayerPlayIndex(index) {
   if (_sidShuffle && _sidShuffleHistory[_sidShuffleHistory.length - 1] !== item.id) _sidShuffleHistory.push(item.id);
   _sidPlayerRenderList();
   _sidPlayerPersist();
-  _sidExtStartFile(item.bytes, item.name, item.song);
+  if (item.bytes || !item.modland) { _sidExtStartFile(item.bytes, item.name, item.song); return; }
+  // a Modland module restored without its bytes: fetched (from the cache) first
+  if (!window.electronAPI?.modlandFetch) return;
+  _sidExtStop();
+  window.electronAPI.modlandFetch(item.modland).then(function(data) {
+    item.bytes = new Uint8Array(data);
+    if (_sidPlaylist[_sidPlaylistIndex] === item) _sidExtStartFile(item.bytes, item.name, item.song);
+  }).catch(function(e) {
+    showViceToast(tf("sidHvscFetchFailed", { name: item.name, error: String(e?.message || e) }), true);
+  });
 }
 
 function _sidPlayerPrev() {
@@ -3787,14 +3844,21 @@ function _sidBase64ToBytes(text) {
   return bytes;
 }
 
-function _sidPlaylistToJson() {
+// storage: "file" keeps every tune's bytes; "local" (localStorage) leaves out
+// the Modland modules' (they come back from the cache); "small" every module's.
+function _sidPlaylistToJson(storage = "file") {
   return {
     format: _SID_PLAYLIST_FORMAT,
     version: 1,
     current: Math.max(0, _sidPlaylistIndex),
     items: _sidPlaylist.map(function(item) {
-      return { name: item.name, song: item.song, fav: item.fav || undefined, hvsc: item.hvsc || undefined, lengths: item.lengths || undefined, data: _sidBytesToBase64(item.bytes) };
-    })
+      const module = !!item.info?.module;
+      const keep = !!item.bytes && (storage === "file" || !module || (storage === "local" && !item.modland));
+      return { name: item.name, song: item.song, fav: item.fav || undefined, hvsc: item.hvsc || undefined, modland: item.modland || undefined,
+        title: item.modland ? item.info?.title : undefined, author: item.modland ? item.info?.author || undefined : undefined,
+        songs: module && item.info.songs > 1 ? item.info.songs : undefined,
+        lengths: item.lengths || undefined, data: keep ? _sidBytesToBase64(item.bytes) : undefined };
+    }).filter(function(item) { return item.data || item.modland; })
   };
 }
 
@@ -3803,9 +3867,13 @@ function _sidPlaylistFromJson(json) {
   if (!json || json.format !== _SID_PLAYLIST_FORMAT || !Array.isArray(json.items)) return null;
   const entries = [];
   json.items.forEach(function(item) {
-    if (!item || typeof item.name !== "string" || typeof item.data !== "string") return;
+    if (!item || typeof item.name !== "string") return;
+    const modland = typeof item.modland === "string" ? item.modland : undefined;
+    if (typeof item.data !== "string" && !modland) return;
     try {
-      entries.push({ name: item.name, song: Number(item.song) || 0, fav: item.fav === true, hvsc: item.hvsc, lengths: item.lengths, bytes: _sidBase64ToBytes(item.data) });
+      entries.push({ name: item.name, song: Number(item.song) || 0, fav: item.fav === true, hvsc: item.hvsc, lengths: item.lengths, modland,
+        title: typeof item.title === "string" ? item.title : undefined, author: typeof item.author === "string" ? item.author : undefined,
+        songs: Number(item.songs) || 0, bytes: typeof item.data === "string" ? _sidBase64ToBytes(item.data) : null });
     } catch (_) {}
   });
   return { entries, current: Number.isInteger(json.current) ? json.current : 0 };
@@ -3837,15 +3905,16 @@ async function _sidPlayerSavePlaylist() {
 }
 
 function _sidPlayerPersist() {
-  try {
-    const dlg = document.getElementById("websid-play-dialog");
-    const state = _sidPlaylistToJson();
-    state.open = !!dlg?.open;
-    state.shuffle = _sidShuffle;
-    localStorage.setItem(_SID_PLAYER_STORE, JSON.stringify(state));
-  } catch (_) {
-    // too many tunes for localStorage: keep at least the window state
-    try { localStorage.setItem(_SID_PLAYER_STORE, JSON.stringify({ open: !!document.getElementById("websid-play-dialog")?.open, shuffle: _sidShuffle })); } catch (__) {}
+  const open = !!document.getElementById("websid-play-dialog")?.open;
+  // too much for localStorage: the dropped modules' bytes go first, then the whole list (the window state stays)
+  for (const storage of ["local", "small", null]) {
+    try {
+      const state = storage ? _sidPlaylistToJson(storage) : {};
+      state.open = open;
+      state.shuffle = _sidShuffle;
+      localStorage.setItem(_SID_PLAYER_STORE, JSON.stringify(state));
+      return;
+    } catch (_) {}
   }
 }
 
@@ -3856,7 +3925,7 @@ function _sidPlayerRestore() {
   const list = _sidPlaylistFromJson(saved);
   if (list && list.entries.length) {
     list.entries.forEach(function(entry) {
-      const info = _sidPsidInfo(entry.bytes);
+      const info = _sidEntryInfo(entry);
       if (info) _sidPlaylist.push(_sidPlayerItem(entry, info));
     });
     _sidPlaylistIndex = _sidPlaylist.length ? Math.max(0, Math.min(list.current, _sidPlaylist.length - 1)) : -1;
@@ -3928,6 +3997,47 @@ function _hvscSearch(entries, query, limit = _HVSC_RESULT_LIMIT, field = "all") 
   };
   hits.sort(function(a, b) { return rank(a) - rank(b) || a.t.localeCompare(b.t); });
   return { total: hits.length, items: hits.slice(0, limit) };
+}
+
+// Top 50 SID tunes (the Classics button), most popular first, as HVSC paths below
+// /MUSICIANS/ without ".sid". From Remix64 (remix64.com): its "Twenty Years of C64
+// Remixes on RKO" statistics give the 25 most remixed SID files and two of the top
+// subtunes; the rest are the originals most often in its C64 remix charts (all time
+// and 2000-2026). Checked against the HVSC catalog of 2026-11.
+const _HVSC_CLASSICS = [
+  "G/Gray_Matt/Last_Ninja_2", "D/Daglish_Ben/Last_Ninja", "H/Hubbard_Rob/Commando", "H/Huelsbeck_Chris/Great_Giana_Sisters",
+  "H/Hubbard_Rob/Delta", "H/Hubbard_Rob/Lightforce", "H/Hubbard_Rob/Monty_on_the_Run", "G/Galway_Martin/Parallax",
+  "H/Hubbard_Rob/Human_Race", "G/Galway_Martin/Wizball", "O/Ouwehand_Reyn/Last_Ninja_3", "T/Tel_Jeroen/Cybernoid_II",
+  "H/Hubbard_Rob/Sanxion", "G/Galway_Martin/Comic_Bakery", "S/Scarim_Nick/Spy_vs_Spy", "G/Galway_Martin/Arkanoid",
+  "H/Hubbard_Rob/International_Karate", "G/Galway_Martin/Green_Beret", "H/Hanlon_David/Enlightenment_Druid_II", "G/Galway_Martin/Rambo_First_Blood_Part_II",
+  "H/Hubbard_Rob/Warhawk", "H/Huelsbeck_Chris/R-Type", "C/Cooksey_Mark/Ghosts_n_Goblins", "O/Ouwehand_Reyn/Flimbos_Quest_intro",
+  "H/Hubbard_Rob/Spellbound", "H/Hubbard_Rob/Thrust", "H/Hubbard_Rob/Zoids", "H/Hubbard_Rob/Nemesis_the_Warlock",
+  "T/Tel_Jeroen/Supremacy", "G/Galway_Martin/Times_of_Lore", "B/Bjerregaard_Johannes/Sweet", "T/Tjelta_Geir/Artillery",
+  "D/Daglish_Ben/Bombo", "W/Whittaker_David/Armageddon_Man", "B/Beben_Wally/Tetris", "H/Hubbard_Rob/Last_V8",
+  "C/Cooksey_Mark/Battle_Ships", "H/Huelsbeck_Chris/Shades", "H/Hubbard_Rob/Thanatos", "H/Hubbard_Rob/ACE_II",
+  "G/Galway_Martin/Terra_Cresta", "T/Tel_Jeroen/Hawkeye", "D/Danko_Tomas/Plastic_Pop", "G/Galway_Martin/Rastan",
+  "D/Daglish_Ben/Firelord", "T/Tel_Jeroen/Dan_Dare_3", "S/Soulet_Gilles/Albedo", "G/Gray_Matt/Driller",
+  "T/Tjelta_Geir/Smile_to_the_Sky", "C/Clarke_Peter/Ocean_Loader_3",
+].map(function(p) { return "/MUSICIANS/" + p + ".sid"; });
+
+// What the result list shows when the search field is empty: "" (nothing / random) or "classics".
+let _hvscListing = "";
+
+// The classics in the catalog, in the order of the selection.
+function _sidClassicEntries(entries, paths) {
+  const byPath = new Map((entries || []).map(function(e) { return [e.p, e]; }));
+  return paths.map(function(p) { return byPath.get(p); }).filter(Boolean);
+}
+
+function _hvscShowClassics() {
+  if (!_hvscEntries) return;
+  const search = document.getElementById("websid-hvsc-search");
+  if (search) search.value = "";
+  _hvscResults = _sidClassicEntries(_hvscEntries, _HVSC_CLASSICS);
+  _hvscTotal = _hvscResults.length;
+  _hvscListing = "classics";
+  _hvscRender();
+  _hvscPersist();
 }
 
 function _hvscRandom(entries, count) {
@@ -4013,7 +4123,10 @@ function _hvscFieldSync() {
 function _hvscRunSearch() {
   const query = document.getElementById("websid-hvsc-search")?.value || "";
   const res = _hvscSearch(_hvscEntries, query, _HVSC_RESULT_LIMIT, _hvscField());
-  _hvscResults = res.items;
+  if (query.trim() || _hvscListing !== "classics") {
+    _hvscListing = "";
+    _hvscResults = res.items;
+  }
   _hvscTotal = res.total;
   _hvscRender();
   _hvscPersist();
@@ -4024,6 +4137,7 @@ function _hvscShowRandom() {
   const search = document.getElementById("websid-hvsc-search");
   if (search) search.value = "";
   _hvscResults = _hvscRandom(_hvscEntries, 25);
+  _hvscListing = "";
   _hvscTotal = _hvscResults.length;
   _hvscRender();
   _hvscPersist();
@@ -4046,6 +4160,7 @@ function _hvscStatusText() {
   text += " · " + (_hvscSource === "local" ? t("sidHvscSourceLocal") : t("sidHvscSourceOnline"));
   const query = document.getElementById("websid-hvsc-search")?.value.trim();
   if (query) text += " · " + (_hvscTotal ? tf("sidHvscResults", { shown: _hvscResults.length, total: _hvscTotal }) : t("sidHvscNoResults"));
+  else if (_hvscListing === "classics") text += " · " + tf("sidClassicsShown", { count: _hvscResults.length });
   else if (!_hvscResults.length) text += " · " + t("sidHvscHint");
   return text;
 }
@@ -4066,6 +4181,11 @@ function _hvscRender() {
   const ready = !!_hvscEntries && !_hvscLoading;
   const random = document.getElementById("websid-hvsc-random");
   if (random) random.disabled = !ready;
+  const classics = document.getElementById("websid-hvsc-classics");
+  if (classics) {
+    classics.disabled = !ready;
+    classics.classList.toggle("websid-play-tool--active", _hvscListing === "classics");
+  }
   const refresh = document.getElementById("websid-hvsc-refresh");
   if (refresh) refresh.disabled = !_hvscAvailable() || !!_hvscLoading || _hvscSource === "local";
   const addAll = document.getElementById("websid-hvsc-add-all");
@@ -4219,6 +4339,7 @@ async function _hvscDownloadAll() {
 function _hvscSetOpen(open) {
   const panel = document.getElementById("websid-hvsc");
   if (!panel) return;
+  if (open && _modlandOpen()) _modlandSetOpen(false);
   panel.hidden = !open;
   _hvscRender();
   _hvscPersist();
@@ -4237,6 +4358,367 @@ function _hvscRestore() {
   if (hvscField && saved?.field === "composer") hvscField.value = "composer";
   _hvscFieldSync();
   if (saved?.open) _hvscSetOpen(true);
+}
+
+/* ── Modland (Amiga and tracker modules) in the SID Player ───────────────
+ * The catalog is Modland's allmods.txt, cut by the backend (modland.rs) to the
+ * formats libopenmpt plays: "size<TAB>Format/Author/…/file" per line. Modules are
+ * fetched one by one and cached there; searching runs here. The panel replaces
+ * the HVSC one: only one of the two is open. */
+const _MODLAND_RESULT_LIMIT = 300;
+
+const _MODLAND_ADD_ALL_MAX = 50;
+
+const _MODLAND_STORE = "c64va-sid-modland";
+
+// "Protracker/Lizardking/1942.mod" → format, composer, title; "_unknown" has no composer,
+// a third folder is a co-author ("coop-Name") or the game / album
+function _modlandParseCatalog(text) {
+  const entries = [];
+  String(text || "").split(/\r?\n/).forEach(function(line) {
+    const tab = line.indexOf("\t");
+    if (tab < 1) return;
+    const path = line.slice(tab + 1);
+    const parts = path.split("/");
+    if (parts.length < 3) return;
+    const file = parts[parts.length - 1];
+    const dot = file.lastIndexOf(".");
+    const author = parts[1] === "_unknown" ? "" : parts[1];
+    const extra = parts.length > 3 ? parts[2] : "";
+    const coop = extra.startsWith("coop-") ? extra.slice(5) : "";
+    entries.push({
+      p: path, f: parts[0], a: coop ? author + " & " + coop : author, g: coop ? "" : extra,
+      t: dot > 0 ? file.slice(0, dot) : file, x: dot > 0 ? file.slice(dot + 1).toUpperCase() : "",
+      s: Number(line.slice(0, tab)) || 0, k: path.toLowerCase()
+    });
+  });
+  return entries;
+}
+
+// field: "all" (every word in the path), "composer" (every word starts a word of the
+// composer's name, "rob" is Rob and Robert, not Probe) or "format" (the format folder)
+function _modlandSearch(entries, query, limit = _MODLAND_RESULT_LIMIT, field = "all") {
+  const words = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const phrase = words.join(" ");
+  if (phrase.length < 2) return { total: 0, items: [] };
+  let hits;
+  if (field === "composer") {
+    hits = (entries || []).filter(function(e) {
+      const name = e.a.toLowerCase().split(/[\s.&-]+/);
+      return words.every(function(w) { return name.some(function(n) { return n.startsWith(w); }); });
+    });
+    hits.sort(function(a, b) { return a.a.localeCompare(b.a) || a.t.localeCompare(b.t); });
+  } else if (field === "format") {
+    hits = (entries || []).filter(function(e) {
+      const format = e.f.toLowerCase();
+      return words.every(function(w) { return format.includes(w); });
+    });
+    hits.sort(function(a, b) { return a.f.localeCompare(b.f) || a.a.localeCompare(b.a) || a.t.localeCompare(b.t); });
+  } else {
+    hits = (entries || []).filter(function(e) { return words.every(function(w) { return e.k.includes(w); }); });
+    const rank = function(e) {
+      const title = e.t.toLowerCase();
+      return title === phrase ? 0 : title.startsWith(phrase) ? 1 : title.includes(phrase) ? 2 : e.a.toLowerCase().includes(phrase) ? 3 : 4;
+    };
+    hits.sort(function(a, b) { return rank(a) - rank(b) || a.t.localeCompare(b.t); });
+  }
+  return { total: hits.length, items: hits.slice(0, limit) };
+}
+
+// Top 50 modules (the Classics button), most popular first, as Modland paths: the
+// original Amiga tunes most often in the Remix64 Amiga remix charts (all time and
+// 2000-2026), in a format libopenmpt plays. Checked against the Modland catalog of 2026-11.
+const _MODLAND_CLASSICS = [
+  "Soundtracker/Banana/echoing.mod", "Soundtracker/Karsten Obarski/crystalhammer.mod", "Soundtracker/Chris Glaister/lost patrol (theme).mod",
+  "Future Composer 1.4/Jochen Hippel/rings of medusa.fc", "Soundtracker/Karsten Obarski/endtheme.mod", "Soundtracker/Karsten Obarski/amegas.mod",
+  "Protracker/Jogeir Liljedahl/guitar slinger.mod", "Protracker/Richard Joseph/the chaos engine - k8.mod", "Protracker/Jean-Francois Freitas/another world intro.mod",
+  "Protracker/Tomas Danko/complications.mod", "Protracker/Jogeir Liljedahl/nearly there.mod", "Protracker/Random Voice/monday.mod",
+  "Protracker/Richard Joseph/gods17.mod", "Soundtracker/Luxor/cousinssong01.mod", "Protracker/Barry Leitch/hero quest ingame.mod",
+  "Soundtracker/Karsten Obarski/blueberry.mod", "Soundtracker/Karsten Obarski/sleepwalk.mod", "Protracker/Jogeir Liljedahl/physical presence.mod",
+  "Protracker/Estrayk/arcane.mod", "Soundtracker/Karsten Obarski/telephone.mod", "Protracker/Barry Leitch/utopia - utopia.mod",
+  "Protracker/Jogeir Liljedahl/oro incenso.mod", "Protracker/Allister Brimble/project x - thesmophoria.mod", "Protracker/Jogeir Liljedahl/mystified.mod",
+  "Protracker/Barry Leitch/lotus2-title.mod", "Protracker/Markus Kludzuweit/thesettlers.mod", "Protracker/Allister Brimble/body blows 2 - title.mod",
+  "Soundtracker/Karsten Obarski/rallyemaster.mod", "Protracker/Patrick Phelan/rock n zool.mod", "Protracker/Allister Brimble/superfrog - title.mod",
+  "OctaMED MMD0/Brian Johnston/hired guns  - front.mmd0", "OctaMED MMD1/Barry Leitch/lethal weapon - level 1.mmd1", "Soundtracker/Luxor/hqc-beat.mod",
+  "OctaMED MMD1/Blair Zuppicich/woodys world - title.mmd1", "Protracker/Stephane Picq/dune-fremens.mod", "Protracker/Richard Joseph/james pond 2 - codename robocod - title.mod",
+  "Soundtracker/Barry Leitch/xenophobe-title.mod", "Protracker/Richard Joseph/moonshine racers - ingame.mod", "Protracker/Matt Furniss/laser squad - lazer squad.mod",
+  "Protracker/Roman Werner/clown-o-mania.mod", "Protracker/Michael/odyssus returns.mod", "OctaMED MMD1/Barry Leitch/tfx loader 2.mmd1",
+  "Protracker/Deejay/i hate marshmallows.mod", "Soundtracker/Banana/steeve.b.mod", "Soundtracker/Andreas Starr/legend of faerghail.mod",
+  "Protracker/Tim Wright/leander (dfc) - world one.mod", "Protracker/Patrick Phelan/zoolrave.mod", "Protracker/Jogeir Liljedahl/roguecraft.mod",
+  "Protracker/Haiko Ruttmann/great courts ii.mod", "Protracker/Tomas Danko/deepcoregame1.mod",
+];
+
+let _modlandListing = "";
+
+function _modlandShowClassics() {
+  if (!_modlandEntries) return;
+  const search = document.getElementById("websid-modland-search");
+  if (search) search.value = "";
+  _modlandResults = _sidClassicEntries(_modlandEntries, _MODLAND_CLASSICS);
+  _modlandTotal = _modlandResults.length;
+  _modlandListing = "classics";
+  _modlandRender();
+  _modlandPersist();
+}
+
+function _modlandFileName(entry) {
+  return entry.p.slice(entry.p.lastIndexOf("/") + 1);
+}
+
+function _modlandSizeText(bytes) {
+  return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB";
+}
+
+let _modlandEntries = null;
+
+let _modlandFetched = null;
+
+let _modlandLoading = null;
+
+let _modlandError = "";
+
+let _modlandResults = [];
+
+let _modlandTotal = 0;
+
+let _modlandBusy = "";
+
+function _modlandAvailable() {
+  return !!window.electronAPI?.modlandCatalog;
+}
+
+function _modlandOpen() {
+  return !document.getElementById("websid-modland")?.hidden;
+}
+
+function _modlandField() {
+  const value = document.getElementById("websid-modland-field")?.value;
+  return value === "composer" || value === "format" ? value : "all";
+}
+
+function _modlandFieldSync() {
+  const field = _modlandField();
+  const text = t(field === "composer" ? "sidModlandSearchComposer" : field === "format" ? "sidModlandSearchFormat" : "sidModlandSearch");
+  const search = document.getElementById("websid-modland-search");
+  search?.setAttribute("placeholder", text);
+  search?.setAttribute("aria-label", text);
+}
+
+function _modlandPersist() {
+  try {
+    localStorage.setItem(_MODLAND_STORE, JSON.stringify({ open: _modlandOpen(), query: document.getElementById("websid-modland-search")?.value || "", field: _modlandField() }));
+  } catch (_) {}
+}
+
+async function _modlandLoad(refresh) {
+  if (!_modlandAvailable()) { _modlandRender(); return; }
+  if (_modlandLoading) return _modlandLoading;
+  if (_modlandEntries && !refresh) return;
+  _modlandError = "";
+  _modlandLoading = (async function() {
+    try {
+      const res = await window.electronAPI.modlandCatalog(!!refresh);
+      _modlandEntries = _modlandParseCatalog(res.text);
+      _modlandFetched = Number(res.fetched) || null;
+    } catch (e) {
+      _modlandError = String(e?.message || e);
+    }
+  })();
+  _modlandRender();
+  try { await _modlandLoading; } finally { _modlandLoading = null; }
+  _modlandRunSearch();
+}
+
+function _modlandRunSearch() {
+  const query = document.getElementById("websid-modland-search")?.value || "";
+  const res = _modlandSearch(_modlandEntries, query, _MODLAND_RESULT_LIMIT, _modlandField());
+  if (query.trim() || _modlandListing !== "classics") {
+    _modlandListing = "";
+    _modlandResults = res.items;
+  }
+  _modlandTotal = res.total;
+  _modlandRender();
+  _modlandPersist();
+}
+
+function _modlandShowRandom() {
+  if (!_modlandEntries) return;
+  const search = document.getElementById("websid-modland-search");
+  if (search) search.value = "";
+  _modlandResults = _hvscRandom(_modlandEntries, 25);
+  _modlandListing = "";
+  _modlandTotal = _modlandResults.length;
+  _modlandRender();
+  _modlandPersist();
+}
+
+function _modlandStatusText() {
+  if (!_modlandAvailable()) return t("sidModlandDesktopOnly");
+  if (_modlandLoading) return t("sidModlandLoading");
+  if (_modlandError) return tf("sidModlandLoadFailed", { error: _modlandError });
+  if (!_modlandEntries) return "";
+  if (_modlandBusy) return _modlandBusy;
+  let text = tf("sidModlandCount", { count: _modlandEntries.length.toLocaleString() });
+  if (_modlandFetched) text += " · " + tf("sidModlandFetched", { date: new Date(_modlandFetched * 1000).toLocaleDateString() });
+  const query = document.getElementById("websid-modland-search")?.value.trim();
+  if (query) text += " · " + (_modlandTotal ? tf("sidHvscResults", { shown: _modlandResults.length, total: _modlandTotal }) : t("sidHvscNoResults"));
+  else if (_modlandListing === "classics") text += " · " + tf("sidClassicsShown", { count: _modlandResults.length });
+  else if (!_modlandResults.length) text += " · " + t("sidModlandHint");
+  return text;
+}
+
+function _modlandRender() {
+  const panel = document.getElementById("websid-modland");
+  const btn = document.getElementById("websid-play-modland");
+  if (btn) {
+    btn.classList.toggle("websid-play-tool--active", _modlandOpen());
+    btn.setAttribute("aria-pressed", String(_modlandOpen()));
+  }
+  if (!panel || panel.hidden) return;
+  const status = document.getElementById("websid-modland-status");
+  if (status) {
+    status.textContent = _modlandStatusText();
+    status.classList.toggle("websid-hvsc-status--error", !!_modlandError);
+  }
+  const ready = !!_modlandEntries && !_modlandLoading;
+  const random = document.getElementById("websid-modland-random");
+  if (random) random.disabled = !ready;
+  const classics = document.getElementById("websid-modland-classics");
+  if (classics) {
+    classics.disabled = !ready;
+    classics.classList.toggle("websid-play-tool--active", _modlandListing === "classics");
+  }
+  const refresh = document.getElementById("websid-modland-refresh");
+  if (refresh) refresh.disabled = !_modlandAvailable() || !!_modlandLoading;
+  const addAll = document.getElementById("websid-modland-add-all");
+  if (addAll) addAll.disabled = !ready || !_modlandResults.length || !!_modlandBusy;
+  const search = document.getElementById("websid-modland-search");
+  if (search) search.disabled = !ready;
+  const field = document.getElementById("websid-modland-field");
+  if (field) field.disabled = !ready;
+  const list = document.getElementById("websid-modland-list");
+  if (!list) return;
+  list.textContent = "";
+  const inList = new Set(_sidPlaylist.map(function(item) { return item.modland; }).filter(Boolean));
+  _modlandResults.forEach(function(entry, index) {
+    const li = document.createElement("li");
+    li.className = "websid-play-item websid-hvsc-item" + (inList.has(entry.p) ? " websid-hvsc-item--added" : "");
+    li.dataset.index = String(index);
+    li.dataset.path = entry.p;
+    const name = document.createElement("span");
+    name.className = "websid-play-item-name";
+    name.textContent = entry.t;
+    const who = document.createElement("span");
+    who.className = "websid-hvsc-item-who";
+    who.textContent = [entry.a, entry.g].filter(Boolean).join(" · ") || entry.f;
+    const len = document.createElement("span");
+    len.className = "websid-hvsc-item-len";
+    len.textContent = entry.x + " · " + _modlandSizeText(entry.s);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "websid-hvsc-item-btn websid-hvsc-item-add";
+    add.textContent = "+";
+    add.setAttribute("aria-label", t("sidHvscAdd"));
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "websid-hvsc-item-btn websid-hvsc-item-save";
+    save.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    save.setAttribute("aria-label", t("sidModlandSave"));
+    li.append(name, who, len, add, save);
+    list.appendChild(li);
+  });
+}
+
+async function _modlandFetchBytes(entry) {
+  try {
+    return new Uint8Array(await window.electronAPI.modlandFetch(entry.p));
+  } catch (e) {
+    showViceToast(tf("sidHvscFetchFailed", { name: _modlandFileName(entry), error: String(e?.message || e) }), true);
+    return null;
+  }
+}
+
+function _modlandItemEntry(entry, bytes) {
+  return { name: _modlandFileName(entry), bytes, modland: entry.p, title: entry.t, author: entry.a };
+}
+
+// Adds a module and plays it if asked; a module already in the playlist is only played.
+async function _modlandAddEntry(entry, play) {
+  const existing = _sidPlaylist.findIndex(function(item) { return item.modland === entry.p; });
+  if (existing >= 0) {
+    if (play) _sidPlayerPlayIndex(existing);
+    return true;
+  }
+  const bytes = await _modlandFetchBytes(entry);
+  if (!bytes) return false;
+  _sidPlayerAdd([_modlandItemEntry(entry, bytes)], play);
+  _modlandRender();
+  return true;
+}
+
+async function _modlandAddAll() {
+  const batch = _modlandResults.slice(0, _MODLAND_ADD_ALL_MAX);
+  if (!batch.length || _modlandBusy) return;
+  const known = new Set(_sidPlaylist.map(function(item) { return item.modland; }));
+  const entries = [];
+  try {
+    for (let i = 0; i < batch.length; i++) {
+      _modlandBusy = tf("sidHvscAdding", { done: i + 1, total: batch.length });
+      _modlandRender();
+      if (known.has(batch[i].p)) continue;
+      const bytes = await _modlandFetchBytes(batch[i]);
+      if (bytes) entries.push(_modlandItemEntry(batch[i], bytes));
+    }
+  } finally {
+    _modlandBusy = "";
+  }
+  if (entries.length) _sidPlayerAdd(entries, false);
+  _modlandRender();
+}
+
+async function _modlandSaveEntry(entry) {
+  const bytes = await _modlandFetchBytes(entry);
+  if (!bytes || !window.electronAPI?.saveBin) return;
+  const fileName = _modlandFileName(entry);
+  const res = await window.electronAPI.saveBin({ bytes: Array.from(bytes), fileName });
+  if (res?.ok) showViceToast(tf("sidHvscSaved", { name: fileName }));
+  else if (res && !res.canceled) showViceToast(res.error || t("sidPlayerSaveFailed"), true);
+}
+
+// The Modland and the HVSC panel share the place under the transport: one at a time.
+// The window is the MOD Player while a module plays, the SID Player while a SID tune
+// does; when nothing plays, the MOD Player with the Modland panel open.
+function _sidPlayerTitleSync() {
+  const title = document.getElementById("websid-play-title");
+  if (!title) return;
+  const playing = _sidExtStatus !== "stopped" && _sidExternalCore;
+  const module = playing ? _sidExternalCore.kind === "mod" : _modlandOpen();
+  title.textContent = t(module ? "modPlayerTitle" : "sidPlayerTitle");
+}
+
+function _modlandSetOpen(open) {
+  const panel = document.getElementById("websid-modland");
+  if (!panel) return;
+  if (open && _hvscOpen()) _hvscSetOpen(false);
+  panel.hidden = !open;
+  _sidPlayerTitleSync();
+  _modlandRender();
+  _modlandPersist();
+  if (open) {
+    _modlandLoad(false);
+    setTimeout(function() { document.getElementById("websid-modland-search")?.focus(); }, 0);
+  }
+}
+
+function _modlandRestore() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(_MODLAND_STORE) || "null"); } catch (_) {}
+  const search = document.getElementById("websid-modland-search");
+  if (search && typeof saved?.query === "string") search.value = saved.query;
+  const field = document.getElementById("websid-modland-field");
+  if (field && (saved?.field === "composer" || saved?.field === "format")) field.value = saved.field;
+  _modlandFieldSync();
+  if (saved?.open) _modlandSetOpen(true);
 }
 
 /* ── SID Player spectrum analyzer (#sid-viz-dialog) ─────────────────────
@@ -4688,6 +5170,7 @@ function _sidExternalCoreStop(keepDialog = false) {
   _sidExtSources.clear();
   if (state.paused && _sidExtAudio) _sidExtAudio.resume();
   if (!keepDialog) _sidPlayerHideWindow();
+  if (state.kind === "mod") { _modCall("close").catch(function() {}); return; }
   // released at once: a render still in flight finishes on its own session
   // lock, and waiting for it let stale sessions pile up on quick switches
   window.electronAPI.releaseSidFile(state.sessionId).catch(function() {});
@@ -4708,9 +5191,27 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
   const state = {
     sessionId: crypto.randomUUID(), active: true, busy: false, timer: null,
     queue: Promise.resolve(), nextTime: ac.currentTime + 0.08, fileBytes: Array.from(bytes),
-    tuneBytes: Array.from(bytes), renderedMs: 0, skipMs: 0, seeking: false, song
+    tuneBytes: Array.from(bytes), renderedMs: 0, skipMs: 0, seeking: false, song,
+    // with Normalize on the first 2 s wait for their measurement; the meter always runs,
+    // so switching it on later finds a level
+    meter: _normMeterNew(), normGain: 1, held: [], warm: !_playerNormalize
   };
   _sidExternalCore = state;
+  const output = _playerNormOutput(ac);
+  _playerNormApply(false);
+  // the measured gain from here on, gliding (2 s) from the start of the audio it was measured on
+  const follow = function(at) {
+    const gain = _playerNormGain({ loudness: _normLoudness(state.meter.blocks), peak: state.meter.peak });
+    if (Math.abs(gain - state.normGain) < 0.005) return;
+    state.normGain = gain;
+    if (_playerNormalize && _playerNormNode) _playerNormNode.gain.setTargetAtTime(gain, Math.max(at, ac.currentTime), 2);
+  };
+  const schedule = function(pcm, channels) {
+    const samples = pcm.length / channels;
+    state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
+    _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, channels, output);
+    state.nextTime += samples / ac.sampleRate;
+  };
   const pump = async function(force) {
     if (!state.active || state.busy || (state.seeking && !force)) return false;
     state.busy = true;
@@ -4728,9 +5229,21 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
         state.fileBytes = null;
         state.renderedMs += state.skipMs + samples * 1000 / ac.sampleRate;
         state.skipMs = 0;
-        state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
-        _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, rendered.channels, _sidExtGain);
-        state.nextTime += samples / ac.sampleRate;
+        _normMeterAdd(state.meter, pcm, rendered.channels, ac.sampleRate);
+        if (!state.warm) {
+          // so the tune starts at its level
+          state.held.push({ pcm, channels: rendered.channels });
+          if (state.meter.frames < ac.sampleRate * 2) continue;
+          state.warm = true;
+          state.normGain = _playerNormGain({ loudness: _normLoudness(state.meter.blocks), peak: state.meter.peak });
+          _playerNormApply(false);
+          state.held.forEach(function(h) { schedule(h.pcm, h.channels); });
+          state.held = [];
+          continue;
+        }
+        const at = state.nextTime;
+        schedule(pcm, rendered.channels);
+        follow(at);
         // A Web Audio szál előre ütemezett hangja UI-terhelés alatt is tovább szól.
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < aheadTarget);
       return true;
@@ -4771,6 +5284,7 @@ async function _vaSidSeek(state, targetMs) {
     if (!state.active) return;
     _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
     _sidExtSources.clear();
+    _playerNormApply(false);
     if (targetMs >= state.renderedMs) {
       state.skipMs = Math.round(targetMs - state.renderedMs);
     } else {
@@ -4780,6 +5294,264 @@ async function _vaSidSeek(state, targetMs) {
       state.renderedMs = 0;
       state.skipMs = targetMs;
     }
+    state.nextTime = 0;
+    await state.pump(true);
+  } finally {
+    state.seeking = false;
+  }
+}
+
+/* ── Tracker modules in the SID Player (libopenmpt) ─────────────────────
+ * mod-worker.js runs libopenmpt (www/lib/libopenmpt); the chunks it renders are
+ * scheduled on the player's own AudioContext like the SID tunes, so pause, seek,
+ * the volume and the spectrum work the same. _sidExternalCore holds the state
+ * with kind "mod". */
+const _MOD_LIB_VERSION = "0.8.10";
+
+// the extensions libopenmpt opens, and the Amiga "mod.name" prefix form
+const _MOD_EXTENSIONS = new Set(("mptm mod s3m xm it 667 669 amf ams c67 cba dbm digi dmf dsm dsym dtm etx far fc fc13 fc14 fmt fst ftm "
+  + "imf ims ice j2b m15 mdl med mms mt2 mtm mus nst okt okta plm psm pt36 ptm puma rtm sfx sfx2 smod st26 stk stm stx stp symmod "
+  + "tcb gmc gtk gt2 ult unic wow xmf gdm mo3 oxm umx mmd0 mmd1 mmd2 mmd3 mmdc").split(" "));
+
+const _MOD_CHUNK_SECONDS = 0.25;
+
+const _MOD_AHEAD_SECONDS = 2;
+
+let _modWorker = null;
+
+/* Volume normalization in the SID Player (the Normalize button): each tune gets the gain
+ * that brings its loudness to one target, at most 12 dB up or down, and never so much
+ * that its peak would clip. A module is measured whole by the worker when it opens; a
+ * SID tune, rendered as it plays, by _normMeter* on its first seconds, and the gain
+ * follows the measurement slowly while it plays. */
+const _PLAYER_NORM_STORE = "c64va-sid-normalize";
+
+const _PLAYER_NORM_TARGET_DB = -18;
+
+const _PLAYER_NORM_MAX_DB = 12;
+
+let _playerNormalize = false;
+
+let _playerNormNode = null;
+
+function _playerNormGain(info) {
+  if (!info || !Number.isFinite(info.loudness)) return 1;
+  const db = Math.max(-_PLAYER_NORM_MAX_DB, Math.min(_PLAYER_NORM_MAX_DB, _PLAYER_NORM_TARGET_DB - info.loudness));
+  let gain = Math.pow(10, db / 20);
+  // the peak is measured at 11 kHz, so it is kept well under full scale
+  if (info.peak > 0) gain = Math.min(gain, Math.max(1, 0.9 / info.peak));
+  return gain;
+}
+
+// Loudness of audio rendered piece by piece, measured like the module worker does: the
+// mono mix in 0.4 s blocks; silent blocks (below -60 dB) and those 10 dB under the
+// average are left out. _normLoudness gives dB, or null for silence.
+function _normMeterNew() {
+  return { blocks: [], sum: 0, n: 0, block: 0, peak: 0, frames: 0 };
+}
+
+function _normMeterAdd(meter, pcm, channels, rate) {
+  if (!meter.block) meter.block = Math.max(1, Math.round(rate * 0.4));
+  const frames = Math.floor(pcm.length / channels);
+  for (let i = 0; i < frames; i++) {
+    let mix = 0;
+    for (let c = 0; c < channels; c++) {
+      const v = pcm[i * channels + c];
+      mix += v;
+      if (v > meter.peak) meter.peak = v; else if (-v > meter.peak) meter.peak = -v;
+    }
+    mix /= channels;
+    meter.sum += mix * mix;
+    if (++meter.n === meter.block) { meter.blocks.push(meter.sum / meter.block); meter.sum = 0; meter.n = 0; }
+  }
+  meter.frames += frames;
+}
+
+function _normLoudness(blocks) {
+  const loud = blocks.filter(function(p) { return p > 1e-6; });
+  if (!loud.length) return null;
+  const mean = loud.reduce(function(a, p) { return a + p; }, 0) / loud.length;
+  const kept = loud.filter(function(p) { return p >= mean * 0.1; });
+  return 10 * Math.log10(kept.reduce(function(a, p) { return a + p; }, 0) / kept.length);
+}
+
+// The player's normalization gain stage, in front of its master gain (SID tunes and modules).
+function _playerNormOutput(ac) {
+  if (!_playerNormNode || _playerNormNode.context !== ac) {
+    _playerNormNode = ac.createGain();
+    _playerNormNode.connect(_sidExtGain);
+  }
+  return _playerNormNode;
+}
+
+function _playerNormApply(smooth) {
+  const state = _sidExternalCore;
+  if (!_playerNormNode || !state) return;
+  const value = _playerNormalize ? state.normGain || 1 : 1;
+  const param = _playerNormNode.gain, now = _playerNormNode.context.currentTime;
+  param.cancelScheduledValues(now);
+  if (smooth) { param.setValueAtTime(param.value, now); param.setTargetAtTime(value, now, 0.25); }
+  else param.setValueAtTime(value, now);
+}
+
+function _playerSetNormalize(on) {
+  _playerNormalize = !!on;
+  try { localStorage.setItem(_PLAYER_NORM_STORE, _playerNormalize ? "1" : "0"); } catch (_) {}
+  const btn = document.getElementById("websid-play-normalize");
+  if (btn) {
+    btn.classList.toggle("websid-play-tool--active", _playerNormalize);
+    btn.setAttribute("aria-pressed", String(_playerNormalize));
+  }
+  _playerNormApply(true);
+}
+
+let _modSeq = 0;
+
+const _modPending = new Map();
+
+function _sidIsModuleName(name) {
+  const base = String(name || "").toLowerCase().replace(/^.*[\\/]/, "");
+  const dot = base.lastIndexOf(".");
+  if (dot > 0 && _MOD_EXTENSIONS.has(base.slice(dot + 1))) return true;
+  // Amiga style: "mod.title", "med.title"
+  const first = base.indexOf(".");
+  return first > 0 && _MOD_EXTENSIONS.has(base.slice(0, first));
+}
+
+function _sidModuleTitle(name) {
+  const base = String(name || "").replace(/^.*[\\/]/, "");
+  const first = base.indexOf(".");
+  if (first > 0 && _MOD_EXTENSIONS.has(base.slice(0, first).toLowerCase()) && !_MOD_EXTENSIONS.has(base.slice(base.lastIndexOf(".") + 1).toLowerCase())) {
+    return base.slice(first + 1);
+  }
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+
+// The playlist info of a module before it is opened; songs and lengths come when it plays.
+function _sidModInfo(entry) {
+  return { title: entry.title || _sidModuleTitle(entry.name), author: entry.author || "", released: "", songs: 1, startSong: 1, module: true };
+}
+
+function _modCall(cmd, data, transfer) {
+  if (!_modWorker) {
+    _modWorker = new Worker("mod-worker.js");
+    _modWorker.onmessage = function(e) {
+      const msg = e.data || {};
+      const pending = _modPending.get(msg.id);
+      if (!pending) return;
+      _modPending.delete(msg.id);
+      if (msg.ok) pending.resolve(msg.result);
+      else pending.reject(new Error(msg.error));
+    };
+    _modWorker.onerror = function(e) {
+      const error = new Error(e?.message || "libopenmpt worker failed");
+      _modPending.forEach(function(p) { p.reject(error); });
+      _modPending.clear();
+      _modWorker = null;
+    };
+  }
+  const id = ++_modSeq;
+  return new Promise(function(resolve, reject) {
+    _modPending.set(id, { resolve, reject });
+    _modWorker.postMessage(Object.assign({ id, cmd }, data || {}), transfer || []);
+  });
+}
+
+function _modEngineLabel() {
+  return "libopenmpt " + _MOD_LIB_VERSION;
+}
+
+// The module's subsongs and their lengths go onto its playlist entry.
+function _modApplyInfo(bytes, info) {
+  const item = _sidPlaylist.find(function(it) { return it.bytes === bytes; });
+  if (!item) return;
+  item.info.songs = Math.max(1, info.subsongs | 0);
+  item.info.startSong = 1;
+  item.song = Math.min(item.info.songs, Math.max(1, info.song + 1));
+  if (info.title && !item.modland) item.info.title = info.title;
+  if (info.artist && !item.info.author) item.info.author = info.artist;
+  item.info.released = info.typeLong || "";
+  item.lengths = (info.durations || []).map(function(s) { return Math.round(s * 1000); });
+  _sidPlayerRenderList();
+  _sidPlayerPersist();
+}
+
+async function _modPlayFileBytes(bytes, filename, song = 0) {
+  _sidStop(true);
+  const ac = _sidPlayerAudio();
+  if (ac.state === "suspended") ac.resume();
+  const state = {
+    kind: "mod", active: true, busy: false, paused: false, timer: null, queue: Promise.resolve(),
+    nextTime: ac.currentTime + 0.08, renderedMs: 0, seeking: false, ended: false, song
+  };
+  _sidExternalCore = state;
+  let info;
+  try {
+    const buf = bytes.slice().buffer;
+    info = await _modCall("open", { bytes: buf, song: song > 0 ? song - 1 : -1 }, [buf]);
+  } catch (e) {
+    if (state.active) {
+      _sidExtStop();
+      showViceToast(tf("sidModPlayFailed", { name: filename, error: String(e?.message || e) }), true);
+    }
+    return false;
+  }
+  if (!state.active) return false;
+  _modApplyInfo(bytes, info);
+  state.normGain = _playerNormGain(info);
+  const output = _playerNormOutput(ac);
+  _playerNormApply(false);
+  const frames = Math.round(ac.sampleRate * _MOD_CHUNK_SECONDS);
+  const pump = async function(force) {
+    if (!state.active || state.busy || state.ended || (state.seeking && !force)) return false;
+    state.busy = true;
+    try {
+      do {
+        state.queue = _modCall("render", { frames, rate: ac.sampleRate });
+        const out = await state.queue;
+        if (!state.active) return false;
+        if (!out.frames) { state.ended = true; break; }
+        state.renderedMs += out.frames * 1000 / ac.sampleRate;
+        state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
+        _sidPlayBuffer(out.pcm, state.nextTime, _sidExtSources, 2, output);
+        state.nextTime += out.frames / ac.sampleRate;
+      } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < _MOD_AHEAD_SECONDS);
+      return true;
+    } catch (e) {
+      if (state.active) {
+        _sidExtStop();
+        showViceToast(tf("sidModPlayFailed", { name: filename, error: String(e?.message || e) }), true);
+      }
+      return false;
+    } finally {
+      state.busy = false;
+    }
+  };
+  state.pump = pump;
+  if (!(await pump())) return false;
+  if (!state.active) return false;
+  _sidPlayerShowTune(filename, _modEngineLabel());
+  state.timer = setInterval(function() {
+    if (!state.active || state.paused) return;
+    if (!state.ended && state.nextTime - ac.currentTime < _MOD_AHEAD_SECONDS * 0.6) pump();
+    // the end of the last tune: nothing left to move on to
+    if (state.ended && !state.busy && ac.currentTime >= state.nextTime
+        && !(_sidShuffle ? _sidPlaylist.length > 1 : _sidPlaylistIndex < _sidPlaylist.length - 1)) _sidExtStop();
+  }, 50);
+  return true;
+}
+
+async function _modSeek(state, targetMs) {
+  state.seeking = true;
+  try {
+    while (state.busy) await state.queue.catch(function() {});
+    if (!state.active) return;
+    _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
+    _sidExtSources.clear();
+    const reached = await _modCall("seek", { seconds: targetMs / 1000 });
+    state.renderedMs = Math.max(0, Number(reached) * 1000 || targetMs);
+    state.ended = false;
     state.nextTime = 0;
     await state.pump(true);
   } finally {
@@ -8253,7 +9025,7 @@ function _sidApplyTranslations() {
   if (sidPreviewModel) {
     sidPreviewModel.value = _sidPreviewModel;
   }
-  setText("#websid-play-title", t("sidPlayerTitle"));
+  _sidPlayerTitleSync();
   setText("#websid-play-note", t("websidPlayNote"));
   setText("#websid-play-drop-hint", t("sidPlayerDropHint"));
   setAttr("#websid-play-play", t("sidPlay"));
@@ -8268,9 +9040,11 @@ function _sidApplyTranslations() {
   setAttr("#websid-play-clear", t("sidPlayerClear"));
   setAttr("#websid-play-hvsc", t("sidHvsc"));
   setAttr("#websid-play-viz", t("sidVizOpen"));
+  setAttr("#websid-play-normalize", t("sidPlayerNormalize"));
   setText("#sid-viz-title", t("sidVizTitle"));
   setText("#sid-viz-bands-lbl", t("sidVizBands"));
   setAttr("#websid-hvsc-random", t("sidHvscRandom"));
+  setAttr("#websid-hvsc-classics", t("sidHvscClassics"));
   setAttr("#websid-hvsc-add-all", t("sidHvscAddAll"));
   setAttr("#websid-hvsc-refresh", t("sidHvscRefresh"));
   setAttr("#websid-hvsc-search", t("sidHvscSearch"));
@@ -8278,6 +9052,16 @@ function _sidApplyTranslations() {
   setAttr("#websid-hvsc-field", t("sidHvscField"));
   setText('#websid-hvsc-field option[value="all"]', t("sidHvscFieldAll"));
   setText('#websid-hvsc-field option[value="composer"]', t("sidHvscFieldComposer"));
+  setAttr("#websid-play-modland", t("sidModland"));
+  setAttr("#websid-modland-random", t("sidModlandRandom"));
+  setAttr("#websid-modland-classics", t("sidModlandClassics"));
+  setAttr("#websid-modland-add-all", t("sidModlandAddAll"));
+  setAttr("#websid-modland-refresh", t("sidHvscRefresh"));
+  _modlandFieldSync();
+  setAttr("#websid-modland-field", t("sidHvscField"));
+  setText('#websid-modland-field option[value="all"]', t("sidHvscFieldAll"));
+  setText('#websid-modland-field option[value="composer"]', t("sidHvscFieldComposer"));
+  setText('#websid-modland-field option[value="format"]', t("sidModlandFieldFormat"));
   setAttr("#websid-play-open-list", t("sidPlayerOpenList"));
   setAttr("#websid-play-song-prev", t("sidPlayerPrevSong"));
   setAttr("#websid-play-song-next", t("sidPlayerNextSong"));
@@ -8465,6 +9249,7 @@ function _sidApplyTranslations() {
   setText("#about-license-label", t("aboutLicenseLabel"));
   setText("#about-website-label", t("aboutWebsiteLabel"));
   setText("#about-sid-credit-label", t("aboutSidCreditLabel"));
+  setText("#about-mod-credit-label", t("aboutModCreditLabel"));
   setText("#about-repo-label", t("aboutRepoLabel"));
   setText("#about-vma-repo-label", t("aboutVmaRepoLabel"));
   setText("#about-vma-version-label", t("aboutVmaVersionLabel"));
