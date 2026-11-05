@@ -4,6 +4,7 @@ A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vani
 [C64 Visual Assembler](https://www.c64va.pro/).
 
 - SID Player: playlists, High Voltage SID Collection, spectrum analyzer, 2SID / 3SID tunes (stereo on VA SID Core)
+- Amiga and tracker modules in the SID Player: the Modland collection (about 177,000 playable modules), dropped `.mod` / `.xm` / `.s3m` / `.it` / `.med` … files, played with [libopenmpt](https://lib.openmpt.org/) (WebAssembly, `www/lib/libopenmpt`)
 - SID Editor: 3-voice tracker (6 voices with a second SID at a selectable address), instruments, wave/arpeggio tables, effects, piano roll, per-voice spectrum, virtual keyboard, MIDI, recording
 - Playback and preview on reSID ([resid-rs](https://github.com/binaryfields/resid-rs), the default) or VA SID Core, both in Rust with a cycle-exact 6510 / CIA / VIC-II core, 6581 and 8580
 - Import: GoatTracker `.sng`, `.sid` (a 2SID tune as six voices); export: `.bin`, 6502 assembly, UltimateBasic, `.sid` (PSID)
@@ -22,6 +23,13 @@ npm test        # JS engine tests; Rust: cargo test in src-tauri
 
 The `Build installers` GitHub Actions workflow builds the Windows and macOS (x64, ARM64) and the Linux (x64)
 installers; start it from the Actions tab or push a `v*` tag.
+
+The macOS app is not signed with an Apple Developer ID or notarized (ad-hoc signature only), so macOS quarantines
+the download and may refuse to open it. After copying it to Applications, run once:
+
+```
+xattr -cr "/Applications/VA SID Studio.app"
+```
 
 `www/sid-editor.js` is the SID code of the Visual Assembler's `www/app.js`. The player is assembled by the
 [VMA](https://github.com/zstarczali/VMA) crate. The C64 emulation in `src-tauri/src/c64` and `mos6510.rs` is a

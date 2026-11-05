@@ -1,8 +1,8 @@
 # VA SID Studio — User Manual
 
-**Version 1.3.3**
+**Version 1.4.0**
 
-VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
+VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
 ---
 
@@ -11,6 +11,7 @@ VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It
 - [1. Getting started](#1-getting-started)
 - [2. SID Player](#2-sid-player)
 - [3. High Voltage SID Collection](#3-high-voltage-sid-collection)
+- [3b. Modland: Amiga and tracker modules](#3b-modland-amiga-and-tracker-modules)
 - [4. Spectrum analyzer](#4-spectrum-analyzer)
 - [5. SID Editor overview](#5-sid-editor-overview)
 - [6. Instruments](#6-instruments)
@@ -61,7 +62,11 @@ The app also remembers which windows were open, their positions, the playlist an
 
 The SID Player plays PSID and RSID files. The tunes run on a built-in C64 core with a cycle-exact 6510, so raster-IRQ, CIA-timed and digi tunes play with the timing of a real machine. Tunes for two or three SIDs (PSID v3 / v4) play in stereo: SID 1 left, SID 2 right, a third SID in the centre.
 
-The badge next to the title shows the engine and the chip in use, for example *reSID (MOS 8580)*. See [Settings](#16-settings) to change them.
+It also plays tracker modules: Protracker / Soundtracker `.mod`, OctaMED, Oktalyzer, Future Composer, Fasttracker 2 `.xm`, Screamtracker `.s3m`, Impulse Tracker `.it` and about 60 more formats, with [libopenmpt](https://lib.openmpt.org/). See [Modland](#3b-modland-amiga-and-tracker-modules) for the collection.
+
+The badge next to the title shows the engine and the chip in use, for example *reSID (MOS 8580)*, or *libopenmpt 0.8.10* for a module. See [Settings](#16-settings) to change the SID engine.
+
+The window is called **MOD Player** while a module plays (and, when nothing plays, while the Modland panel is open) and **SID Player** otherwise.
 
 **Closing the window stops the music**, whether you use ×, Esc or the toolbar button.
 
@@ -71,22 +76,25 @@ The badge next to the title shows the engine and the chip in use, for example *r
 |---|---|
 | Transport | Previous, Play, Pause, Stop, Next, Shuffle |
 | Seek | Back 10 s, Forward 10 s |
-| Tools | Spectrum analyzer, HVSC, Add .sid files, Open playlist, Save playlist, Clear playlist |
+| Tools | Spectrum analyzer, Normalize volume, HVSC, Modland, Add .sid files or modules, Open playlist, Save playlist, Clear playlist |
 | Volume | **Master volume** knob, shared with the SID Editor |
 
 ### Playlist
 
-- **Add tunes** with the **+** button or by dropping `.sid` files on the window.
+- **Add tunes** with the **+** button or by dropping `.sid` files or modules on the window. A module is recognised by its extension (`.mod`, `.xm`, `.s3m`, `.it`, `.med`, `.okt`…) or by the Amiga prefix form (`mod.title`).
 - **Click a tune** to play it. The × that appears when you hover over a row removes that tune.
 - **☆ / ★** marks a favourite. It is kept in the saved state and in playlist files.
 - **Save playlist** and **Open playlist** write and read a `.sidpl` file. The tunes are embedded in it, so the file stands on its own.
+- **Modules in the saved state:** a module from Modland is remembered by its path and comes back from the cache; a module you dropped on the window is kept with its bytes as long as the app's storage has room for it.
 - **Shuffle** plays the list in random order, and no tune repeats until every tune has played. **Previous** steps back along the random order.
 
 ### Position and subtunes
 
 - Drag the **position bar** or use **Back / Forward 10 s** to seek. The skipped part runs silently, so a long jump can take a moment.
 - A file with several songs shows **‹ 1 / 3 ›** next to its details, to step between subtunes.
-- **When a tune ends:** an HVSC tune has a known length, so the list moves on when it ends. Any other tune moves on after 3 minutes. The last tune in the list keeps playing until you stop it.
+- **When a tune ends:** an HVSC tune and a module have a known length, so the list moves on when they end. Any other tune moves on after 3 minutes. The last tune in the list keeps playing until you stop it; the last module stops at its end.
+- **Modules with several songs** (some `.xm`, `.it` and game modules) show the same **‹ 1 / 3 ›** once the module has started.
+- **Normalize volume** (the button after the spectrum analyzer) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. The button can be switched while a tune plays.
 
 ---
 
@@ -100,6 +108,7 @@ The **HVSC** button opens a search panel for the [High Voltage SID Collection](h
 - **Composer:** the list next to the search field switches from **All** to **Composer**, which searches composer names only (`hubbard`, `rob hubbard`, `galway`) and lists the tunes by composer. The name comes from the tune's folder under `MUSICIANS`, so a composer is found by the folder's name, which may be a handle (`laxity`). About 4,600 tunes in `GAMES` and `DEMOS` have no composer folder: **All** finds them by title or folder.
 - **Results:** click a tune to play it. In its row, **+** adds it to the playlist and the download button saves the `.sid` file.
 - **Random tunes** lists 25 random ones. **Add all results** adds up to 100 of the found tunes to the playlist.
+- **Top 50** (the star) lists 50 popular C64 tunes, most popular first: the 25 most remixed SID files according to [Remix64](https://remix64.com/)'s statistics of 20 years of C64 remixes (Last Ninja 2, Last Ninja, Commando, Great Giana Sisters, Delta…), then the originals most often in Remix64's C64 remix charts. HVSC itself has no ratings.
 - **Tune lengths:** HVSC knows the length of every subtune, so the position bar shows it and the playlist moves on at the right moment.
 
 **Where the tunes come from:** the catalog and single tunes are downloaded from an HVSC mirror on first use and kept in the app's cache, so a tune you have played once also plays offline. **Update catalog** fetches the newest list.
@@ -108,6 +117,22 @@ The **HVSC** button opens a search panel for the [High Voltage SID Collection](h
 
 - **Download the whole collection…** downloads the official archive (about 85 MB) into a folder you pick and unpacks it there (about 380 MB). From then on the player uses that copy.
 - **Use a local HVSC folder…** points the player at a collection you already have.
+
+---
+
+## 3b. Modland: Amiga and tracker modules
+
+The **Modland** button (the floppy disk) opens a search panel for [Modland](https://ftp.modland.com/), the large archive of music modules. The panel lists only the formats the player can play: about 177,000 modules in 65 formats, among them Protracker, Soundtracker, OctaMED, Oktalyzer, Future Composer, Digibooster, Symphonie, Fasttracker 2, Screamtracker and Impulse Tracker. The HVSC and the Modland panel take turns: opening one closes the other.
+
+- **Search:** type a title, composer or format, for example `lizardking`, `jesper kyd` or `octamed`. Every word has to match. **Enter** plays the first result.
+- **Composer** and **Format** in the list next to the search field search only composer names or only the format (`protracker`, `future composer`, `fasttracker`). A composer is the module's folder in Modland, which may be a handle; a second name after `coop-` is shown with an `&`.
+- **Results:** click a module to play it. Its row shows the composer (and the game or album, if Modland files it so), the format and the file size. **+** adds it to the playlist and the download button saves the file.
+- **Random modules** lists 25 random ones. **Add all results** adds up to 50 of the found modules to the playlist.
+- **Top 50** (the star) lists 50 popular Amiga tunes, most popular first: the originals most often in [Remix64](https://remix64.com/)'s Amiga remix charts, in a format the player plays (Echoing, Crystal Hammer, Lost Patrol, Rings of Medusa, Amegas, Guitar Slinger, The Chaos Engine…). Chart tunes in TFMX or other formats libopenmpt cannot play (Turrican 2, Amberstar, A Prehistoric Tale…) are left out.
+
+**Where the modules come from:** the catalog (Modland's file list, about 6 MB) and single modules are downloaded from Modland on first use and kept in the app's cache, so a module you have played once also plays offline. **Update catalog** fetches the newest list.
+
+Not every Modland format plays: the players of many Amiga formats (TFMX, Jochen Hippel, Sonic Arranger, AHX and others) are not in libopenmpt, so the panel leaves them out, together with the console and computer formats of other machines.
 
 ---
 
@@ -509,6 +534,7 @@ The tune in the editor always stays whole.
 - **One volume per chip**, as on the SID: there is no volume for one voice. Use sustain for the level of one voice.
 - **The UltimateBasic export is PAL:** the UltimateBasic player has its own PAL note table and plays at 50 Hz.
 - **Copy and paste keys:** **Ctrl+C** and **Ctrl+V** are Ctrl on macOS too. Cmd does not work in the grid; the buttons and the right-click menu do.
+- **Amiga formats with their own player code** (TFMX, Jochen Hippel, Sonic Arranger, AHX…) do not play: libopenmpt has no player for them.
 
 ---
 
@@ -522,3 +548,4 @@ VA SID Studio is free software under the GNU General Public License v3.0.
 - **SID emulation:** reSID by Dag Lem, Rust port [resid-rs](https://github.com/binaryfields/resid-rs) by Sebastian Jastrzebski (GPLv3)
 - **C64 emulation:** a port of parts of [VICE](https://vice-emu.sourceforge.io/) (GPLv2+)
 - **Tunes:** the [High Voltage SID Collection](https://www.hvsc.c64.org/)
+- **Modules:** [Modland](https://ftp.modland.com/), played with [libopenmpt](https://lib.openmpt.org/) 0.8.10 by the OpenMPT project (BSD-3-Clause)

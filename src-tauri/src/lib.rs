@@ -1,6 +1,7 @@
 // VA SID Studio backend: SID emulation (VA SID Core), .sid register dump, the VMA build of the player, file saving.
 mod c64;
 mod hvsc;
+mod modland;
 mod midi_permission;
 mod mos6510;
 mod sid_chip;
@@ -479,6 +480,8 @@ pub fn run() {
             hvsc::hvsc_clear_folder,
             hvsc::hvsc_download_all,
             hvsc::hvsc_cancel_download,
+            modland::modland_catalog,
+            modland::modland_fetch,
             vma_build_raw,
             save_bin,
         ])

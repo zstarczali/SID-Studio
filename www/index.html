@@ -98,7 +98,9 @@
         </div>
         <div class="websid-play-tools">
           <button id="websid-play-viz" class="websid-play-tool" type="button" aria-label="Spectrum analyzer" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 14V9M5 14V5M8 14V7M11 14V3M14 14V8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/></svg></button>
+          <button id="websid-play-normalize" class="websid-play-tool" type="button" aria-label="Normalize volume" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12M2 10.5h12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1.5 1.5"/><path d="M4 13V9M8 13V7M12 13V8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 3v2.5M8 3v2.5M12 3v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
           <button id="websid-play-hvsc" class="websid-play-tool" type="button" aria-label="HVSC" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="3.8" rx="5.5" ry="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 3.8v8.4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V3.8M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+          <button id="websid-play-modland" class="websid-play-tool" type="button" aria-label="Modland" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.5h9l2 2v9h-11z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M5 2.5v3.5h5.5V2.5M8.5 3.5v1.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><rect x="4.5" y="8.5" width="7" height="5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
           <button id="websid-play-add" class="websid-play-tool" type="button" aria-label="Add .sid files…"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
           <button id="websid-play-open-list" class="websid-play-tool" type="button" aria-label="Open playlist…"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5v8h11l2-5.5H4.5l-2 5.5M1.5 4.5V3h4l1 1.5h6V7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
           <button id="websid-play-save-list" class="websid-play-tool" type="button" aria-label="Save playlist…"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.5h9l2 2v9h-11zM5 2.5v3.5h5.5V2.5M4.5 13.5V9h7v4.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
@@ -137,6 +139,7 @@
             <select id="websid-hvsc-field" class="websid-hvsc-field" aria-label="Search in"><option value="all">All</option><option value="composer">Composer</option></select>
             <input id="websid-hvsc-search" class="websid-hvsc-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search HVSC…">
             <div class="websid-play-tools">
+              <button id="websid-hvsc-classics" class="websid-play-tool" type="button" aria-label="Top 50"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
               <button id="websid-hvsc-random" class="websid-play-tool" type="button" aria-label="Random tunes"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5.3" cy="5.3" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="10.7" cy="10.7" r="1.1" fill="currentColor"/></svg></button>
               <button id="websid-hvsc-add-all" class="websid-play-tool" type="button" aria-label="Add all results to the playlist"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h7M2 7.5h7M2 11h4.5M12 8.5v6M9 11.5h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
               <button id="websid-hvsc-refresh" class="websid-play-tool" type="button" aria-label="Update catalog"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -147,13 +150,27 @@
           <div class="websid-hvsc-status"><span id="websid-hvsc-status"></span><button id="websid-hvsc-link" class="websid-hvsc-link" type="button">hvsc.c64.org</button></div>
           <ol id="websid-hvsc-list" class="websid-play-list websid-hvsc-list"></ol>
         </section>
+        <section id="websid-modland" class="websid-hvsc websid-modland" hidden>
+          <div class="websid-hvsc-bar">
+            <select id="websid-modland-field" class="websid-hvsc-field" aria-label="Search in"><option value="all">All</option><option value="composer">Composer</option><option value="format">Format</option></select>
+            <input id="websid-modland-search" class="websid-hvsc-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search Modland…">
+            <div class="websid-play-tools">
+              <button id="websid-modland-classics" class="websid-play-tool" type="button" aria-label="Top 50"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
+              <button id="websid-modland-random" class="websid-play-tool" type="button" aria-label="Random modules"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5.3" cy="5.3" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="10.7" cy="10.7" r="1.1" fill="currentColor"/></svg></button>
+              <button id="websid-modland-add-all" class="websid-play-tool" type="button" aria-label="Add all results to the playlist"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h7M2 7.5h7M2 11h4.5M12 8.5v6M9 11.5h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+              <button id="websid-modland-refresh" class="websid-play-tool" type="button" aria-label="Update catalog"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+          </div>
+          <div class="websid-hvsc-status"><span id="websid-modland-status"></span><button id="websid-modland-link" class="websid-hvsc-link" type="button">modland.com</button></div>
+          <ol id="websid-modland-list" class="websid-play-list websid-hvsc-list"></ol>
+        </section>
         <ol id="websid-play-list" class="websid-play-list"></ol>
         <div id="websid-play-drop-hint" class="websid-play-drop-hint">Drop .sid files here</div>
         <div class="websid-play-note" id="websid-play-note" hidden>
           External .sid tune — the tracker view stays with your current song.
         </div>
       </div>
-      <input id="websid-play-files" type="file" accept=".sid" multiple hidden>
+      <input id="websid-play-files" type="file" accept=".sid,.mod,.xm,.s3m,.it,.mptm,.mo3,.med,.mmd0,.mmd1,.mmd2,.mmd3,.okt,.okta,.669,.amf,.ams,.dbm,.digi,.dmf,.dsm,.dtm,.far,.fc,.fc13,.fc14,.ftm,.gdm,.imf,.ice,.mdl,.mt2,.mtm,.psm,.ptm,.sfx,.stm,.stp,.symmod,.ult,.umx,.xmf" multiple hidden>
       <input id="websid-play-list-file" type="file" accept=".sidpl" hidden>
     </div>
   </dialog>
@@ -691,6 +708,7 @@
             </div>
           </div>
           <p class="about-sid-credit"><span id="about-sid-credit-label">SID emulation: reSID by Dag Lem, Rust port resid-rs by Sebastian Jastrzebski. GitHub repository:</span> <a href="https://github.com/binaryfields/resid-rs" target="_blank" rel="noopener noreferrer">https://github.com/binaryfields/resid-rs</a><br>(GPLv3)</p>
+          <p class="about-sid-credit"><span id="about-mod-credit-label">Module playback: libopenmpt 0.8.10 by the OpenMPT project. Website:</span> <a href="https://lib.openmpt.org/" target="_blank" rel="noopener noreferrer">https://lib.openmpt.org/</a><br>(<a href="https://lib.openmpt.org/libopenmpt/license/" target="_blank" rel="noopener noreferrer">BSD-3-Clause</a>)</p>
         </div>
       </div>
       <button id="about-close" class="primary" type="button">Close</button>

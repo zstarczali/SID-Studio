@@ -18,6 +18,11 @@ function fnSource(name) {
   throw new Error(`Could not parse ${name}`);
 }
 
+// a GainNode stand-in for the player's normalization stage
+function fakeGain() {
+  return { connect() {}, context: this, gain: { value: 1, setValueAtTime() {}, cancelScheduledValues() {}, setTargetAtTime() {} } };
+}
+
 test("Stop leaves the SID Player's tune alone unless asked", () => {
   let externalStops = 0;
   const ctx = {
@@ -48,9 +53,9 @@ test(".sid files are played only from the toolbar SID player, on the backend", (
 
 test("the backend renders an external PSID in chunks", async () => {
   const calls = { render: [], release: [], shown: [], sources: [] };
-  const ac = { currentTime: 0, sampleRate: 44100 };
+  const ac = { currentTime: 0, sampleRate: 44100, createGain: fakeGain };
   const ctx = {
-    Uint8Array, Float32Array, Promise, Array,
+    Uint8Array, Float32Array, Promise, Array, Math,
     crypto: { randomUUID() { return "sid-session-1"; } },
     window: { electronAPI: {
       renderSidFile(payload) { calls.render.push(payload); return Promise.resolve({ channels: 1, pcm: "AAAAAA==" }); },
@@ -74,7 +79,7 @@ test("the backend renders an external PSID in chunks", async () => {
     clearInterval() {},
   };
   vm.createContext(ctx);
-  vm.runInContext(`${fnSource("_sidIsNtsc")}; ${fnSource("_sidFps")}; ${fnSource("_sidExternalCoreStop")}; ${fnSource("_sidEngineLabel")}; ${fnSource("_sidPlayerAheadSeconds")}; ${fnSource("_sidPlayerBufferSize")}; ${fnSource("_vaSidPlayFileBytes")}; this.play = _vaSidPlayFileBytes; this.stop = _sidExternalCoreStop;`, ctx);
+  vm.runInContext(`const _PLAYER_NORM_TARGET_DB = -18, _PLAYER_NORM_MAX_DB = 12; var _playerNormalize = false, _playerNormNode = null; ${["_normMeterNew", "_normMeterAdd", "_normLoudness", "_playerNormGain", "_playerNormOutput", "_playerNormApply"].map(fnSource).join("\n")}; ${fnSource("_sidIsNtsc")}; ${fnSource("_sidFps")}; ${fnSource("_sidExternalCoreStop")}; ${fnSource("_sidEngineLabel")}; ${fnSource("_sidPlayerAheadSeconds")}; ${fnSource("_sidPlayerBufferSize")}; ${fnSource("_vaSidPlayFileBytes")}; this.play = _vaSidPlayFileBytes; this.stop = _sidExternalCoreStop;`, ctx);
   const bytes = new Uint8Array([80, 83, 73, 68]);
   assert.equal(await ctx.play(bytes, "example.sid"), true);
   assert.ok(calls.render.length > 1);
@@ -100,9 +105,9 @@ test("the backend renders an external PSID in chunks", async () => {
 
 test("a stereo .sid render is timed by its samples per channel", async () => {
   const buffers = [];
-  const ac = { currentTime: 0, sampleRate: 44100 };
+  const ac = { currentTime: 0, sampleRate: 44100, createGain: fakeGain };
   const ctx = {
-    Uint8Array, Float32Array, Promise, Array,
+    Uint8Array, Float32Array, Promise, Array, Math,
     crypto: { randomUUID() { return "sid-session-2"; } },
     window: { electronAPI: {
       renderSidFile() { return Promise.resolve({ channels: 2, pcm: "" }); },
@@ -126,7 +131,7 @@ test("a stereo .sid render is timed by its samples per channel", async () => {
     clearInterval() {},
   };
   vm.createContext(ctx);
-  vm.runInContext(`${fnSource("_sidIsNtsc")}; ${fnSource("_sidFps")}; ${fnSource("_sidExternalCoreStop")}; ${fnSource("_sidEngineLabel")}; ${fnSource("_sidPlayerAheadSeconds")}; ${fnSource("_sidPlayerBufferSize")}; ${fnSource("_vaSidPlayFileBytes")}; this.play = _vaSidPlayFileBytes; this.stop = _sidExternalCoreStop;`, ctx);
+  vm.runInContext(`const _PLAYER_NORM_TARGET_DB = -18, _PLAYER_NORM_MAX_DB = 12; var _playerNormalize = false, _playerNormNode = null; ${["_normMeterNew", "_normMeterAdd", "_normLoudness", "_playerNormGain", "_playerNormOutput", "_playerNormApply"].map(fnSource).join("\n")}; ${fnSource("_sidIsNtsc")}; ${fnSource("_sidFps")}; ${fnSource("_sidExternalCoreStop")}; ${fnSource("_sidEngineLabel")}; ${fnSource("_sidPlayerAheadSeconds")}; ${fnSource("_sidPlayerBufferSize")}; ${fnSource("_vaSidPlayFileBytes")}; this.play = _vaSidPlayFileBytes; this.stop = _sidExternalCoreStop;`, ctx);
   assert.equal(await ctx.play(new Uint8Array([80, 83, 73, 68]), "stereo.sid"), true);
   assert.ok(buffers.length > 1);
   assert.equal(buffers[0].channels, 2);
@@ -270,6 +275,7 @@ test("external SID dialog: pause freezes the counter, play resumes, stop resets 
   vm.createContext(ctx);
   vm.runInContext(`let _sidExtFile = null, _sidExtStatus = "stopped", _sidExtElapsed = 0, _sidExtRunSince = null, _sidExtTick = null, _sidExtStarting = false, _sidSeekDragging = false;
     function _sidPlayerTickUi() {}
+    function _sidPlayerTitleSync() {}
     ${["_sidExtFormatTime", "_sidExtElapsedMs", "_sidExtRender", "_sidExtSetStatus", "_sidExtPlay", "_sidExtPause", "_sidExtStop"].map(fnSource).join("\n")}
     this.api = { set: _sidExtSetStatus, play: _sidExtPlay, pause: _sidExtPause, stop: _sidExtStop, status: () => _sidExtStatus };`, ctx);
   const { api } = ctx;
@@ -317,8 +323,8 @@ test("SID player playlist: PSID metadata, prev restarts then steps back, remove 
     _sidPlayerPersist() {},
   };
   vm.createContext(ctx);
-  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; var _sidPlaylist = [], _sidPlaylistIndex = -1, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
-    ${["_sidPsidInfo", "_sidValidSong", "_sidPlayerItem", "_sidPlayerTuneMs", "_sidPlayerAdd", "_sidPlayerPlayIndex", "_sidPlayerPrev", "_sidPlayerNext", "_sidPlayerRemove",
+  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; function _sidIsModuleName() { return false; } var _sidPlaylist = [], _sidPlaylistIndex = -1, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
+    ${["_sidPsidInfo", "_sidEntryInfo", "_sidValidSong", "_sidPlayerItem", "_sidPlayerTuneMs", "_sidPlayerAdd", "_sidPlayerPlayIndex", "_sidPlayerPrev", "_sidPlayerNext", "_sidPlayerRemove",
       "_sidPlayerLengthMs", "_sidPlayerTickUi", "_sidPlayerRenderList"].map(fnSource).join("\n")}
     this.api = { add: _sidPlayerAdd, prev: _sidPlayerPrev, next: _sidPlayerNext, remove: _sidPlayerRemove,
       list: () => _sidPlaylist, index: () => _sidPlaylistIndex };`, ctx);
@@ -360,12 +366,19 @@ test("switching tunes stops the current one through the player, keeping the wind
     _sidExtStop() { order.push("player-stop"); ctx._sidExtStatus = "stopped"; },
     _sidUsesNativeCore: () => true,
     _vaSidPlayFileBytes: async () => { order.push("start"); return true; },
+    _modPlayFileBytes: async () => { order.push("module"); return true; },
     _webSidPlayFileBytes: async () => true,
   };
   vm.createContext(ctx);
-  vm.runInContext(`${fnSource("_sidExtStartFile")}; this.start = _sidExtStartFile;`, ctx);
-  assert.equal(await ctx.start(new Uint8Array(4), "b.sid"), true);
+  vm.runInContext(`${fnSource("_sidPsidInfo")}
+${fnSource("_sidExtStartFile")}; this.start = _sidExtStartFile;`, ctx);
+  const psid = new Uint8Array(0x80);
+  psid.set([0x50, 0x53, 0x49, 0x44]);
+  assert.equal(await ctx.start(psid, "b.sid"), true);
   assert.deepEqual(order, ["player-stop", "start"]);
+  // anything that is not a PSID / RSID goes to libopenmpt
+  assert.equal(await ctx.start(new Uint8Array(1084), "c.mod"), true);
+  assert.deepEqual(order, ["player-stop", "start", "player-stop", "module"]);
   assert.ok(appJs.includes("// the event is queued: the window may have been reopened since\n    if (dialog.open) return;")
     || appJs.includes("// the event is queued: the window may have been reopened since\r\n    if (dialog.open) return;"));
 });
@@ -411,7 +424,7 @@ test("SID player auto-advance moves one tune on, the UI refresh never advances",
     _sidPlayerPersist() {},
   };
   vm.createContext(ctx);
-  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; var _sidPlaylist = [], _sidPlaylistIndex = 0, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
+  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; function _sidIsModuleName() { return false; } var _sidPlaylist = [], _sidPlaylistIndex = 0, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
     ${["_sidPsidInfo", "_sidValidSong", "_sidPlayerTuneMs", "_sidPlayerPlayIndex", "_sidPlayerNext", "_sidPlayerLengthMs", "_sidPlayerTickUi",
       "_sidPlayerRenderList", "_sidPlayerAutoAdvance"].map(fnSource).join("\n")}
     this.api = { tick: _sidPlayerTickUi, render: _sidPlayerRenderList, advance: _sidPlayerAutoAdvance,
@@ -439,7 +452,7 @@ test("SID player uses the HVSC subtune length for the seek bar and auto-advance"
     _sidPlayerPersist() {},
   };
   vm.createContext(ctx);
-  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; var _sidPlaylist = [], _sidPlaylistIndex = 0, _sidShuffle = false, _sidShuffleHistory = [];
+  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; function _sidIsModuleName() { return false; } var _sidPlaylist = [], _sidPlaylistIndex = 0, _sidShuffle = false, _sidShuffleHistory = [];
     ${["_sidPlayerTuneMs", "_sidPlayerPlayIndex", "_sidPlayerNext", "_sidPlayerLengthMs", "_sidPlayerAutoAdvance"].map(fnSource).join("\n")}
     this.api = { length: _sidPlayerLengthMs, advance: _sidPlayerAutoAdvance, set(list) { _sidPlaylist = list; } };`, ctx);
   ctx.api.set([
@@ -547,8 +560,8 @@ test("SID player shuffle: every tune once per round, Previous steps back along t
     Math,
   };
   vm.createContext(ctx);
-  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; var _sidPlaylist = [], _sidPlaylistIndex = -1, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
-    ${["_sidPsidInfo", "_sidValidSong", "_sidPlayerItem", "_sidPlayerTuneMs", "_sidPlayerAdd", "_sidPlayerPlayIndex", "_sidPlayerPrev", "_sidPlayerNext", "_sidPlayerSetShuffle",
+  vm.runInContext(`const _SID_TUNE_LENGTH_MS = 180000; function _sidIsModuleName() { return false; } var _sidPlaylist = [], _sidPlaylistIndex = -1, _sidSeekDragging = false, _sidShuffle = false, _sidShuffleHistory = [];
+    ${["_sidPsidInfo", "_sidEntryInfo", "_sidValidSong", "_sidPlayerItem", "_sidPlayerTuneMs", "_sidPlayerAdd", "_sidPlayerPlayIndex", "_sidPlayerPrev", "_sidPlayerNext", "_sidPlayerSetShuffle",
       "_sidPlayerLengthMs", "_sidPlayerTickUi", "_sidPlayerRenderList"].map(fnSource).join("\n")}
     this.api = { add: _sidPlayerAdd, next: _sidPlayerNext, prev: _sidPlayerPrev, shuffle: _sidPlayerSetShuffle };`, ctx);
   const psid = () => { const b = new Uint8Array(0x80); b.set([0x50, 0x53, 0x49, 0x44]); return b; };

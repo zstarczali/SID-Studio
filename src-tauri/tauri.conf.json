@@ -1,6 +1,6 @@
 {
   "productName": "VA SID Studio",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "identifier": "hu.zstarczali.vasidstudio",
   "build": {
     "frontendDist": "../www"

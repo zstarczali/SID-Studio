@@ -75,10 +75,17 @@ The required system libraries must still be available.
 3. Drag VA SID Studio into the Applications folder.
 4. Launch the application from Applications.
 
-The current build workflow uses ad-hoc signing and does not include Apple
-notarization. If macOS blocks the first launch and you downloaded the
-package from a trusted source, open System Settings > Privacy & Security.
-Use "Open Anyway" for this application if that option is shown.
+The app is not signed with an Apple Developer ID and is not notarized (the
+build workflow only signs it ad hoc). macOS therefore marks the downloaded
+app as quarantined, and may say it "is damaged and can't be opened" or that
+it "cannot be verified". If you downloaded the package from a trusted
+source, remove the quarantine flag once, after copying the app to
+Applications:
+
+    xattr -cr "/Applications/VA SID Studio.app"
+
+Then launch it again. Alternatively, open System Settings > Privacy &
+Security and use "Open Anyway" for this application if that option is shown.
 
 5. TROUBLESHOOTING
 ------------------
