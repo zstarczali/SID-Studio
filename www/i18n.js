@@ -364,6 +364,8 @@ const translations = {
   "appManualFailed": "A kézikönyv nem nyitható meg: {error}",
   "appLanguage": "Nyelv",
   "about": "Névjegy",
+
+  "donate": "Adományozás",
   "appExit": "Kilépés",
   "checkForUpdate": "Frissítés keresése",
   "updateChecking": "Új verzió keresése…",
@@ -761,6 +763,8 @@ const translations = {
   "appManualFailed": "Could not open the manual: {error}",
   "appLanguage": "Language",
   "about": "About",
+
+  "donate": "Donation",
   "appExit": "Exit",
   "checkForUpdate": "Check for Update",
   "updateChecking": "Checking for a new version…",
@@ -1158,6 +1162,8 @@ const translations = {
   "appManualFailed": "No se pudo abrir el manual: {error}",
   "appLanguage": "Idioma",
   "about": "Acerca de",
+
+  "donate": "Donación",
   "appExit": "Salir",
   "checkForUpdate": "Buscar actualizaciones",
   "updateChecking": "Buscando una nueva versión…",
@@ -1555,6 +1561,8 @@ const translations = {
   "appManualFailed": "Das Handbuch konnte nicht geöffnet werden: {error}",
   "appLanguage": "Sprache",
   "about": "Über",
+
+  "donate": "Spenden",
   "appExit": "Beenden",
   "checkForUpdate": "Nach Updates suchen",
   "updateChecking": "Suche nach neuer Version…",
@@ -1952,6 +1960,8 @@ const translations = {
   "appManualFailed": "De handleiding kon niet worden geopend: {error}",
   "appLanguage": "Taal",
   "about": "Over",
+
+  "donate": "Doneren",
   "appExit": "Afsluiten",
   "checkForUpdate": "Controleren op updates...",
   "updateChecking": "Zoeken naar een nieuwe versie…",
@@ -2349,6 +2359,8 @@ const translations = {
   "appManualFailed": "Nie można otworzyć podręcznika: {error}",
   "appLanguage": "Język",
   "about": "O programie",
+
+  "donate": "Darowizna",
   "appExit": "Zakończ",
   "checkForUpdate": "Sprawdź aktualizacje",
   "updateChecking": "Sprawdzanie nowej wersji…",
@@ -2746,6 +2758,8 @@ const translations = {
   "appManualFailed": "Impossibile aprire il manuale: {error}",
   "appLanguage": "Lingua",
   "about": "Informazioni",
+
+  "donate": "Donazione",
   "appExit": "Esci",
   "checkForUpdate": "Controlla aggiornamenti",
   "updateChecking": "Ricerca di una nuova versione…",

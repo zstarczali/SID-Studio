@@ -9288,6 +9288,7 @@ function _sidApplyTranslations() {
   setAttr("#app-settings-btn", t("appSettings"));
   setAttr("#app-manual-btn", t("appManual"));
   setAttr("#app-about-btn", t("about"));
+  setAttr("#app-donate-btn", t("donate"));
   _updateSyncButton();
   setText("#update-server-lbl", t("updateServerLabel"));
   setText("#update-server-default", t("updateServerDefault"));
@@ -9636,6 +9637,10 @@ function _setupAbout() {
   }));
   closeBtn.addEventListener("click", () => dialog.close());
   document.getElementById("app-exit-btn")?.addEventListener("click", _appExit);
+  // adomány: a c64va.pro PayPal-oldala (register/donate.php) a böngészőben, az app nyelvén (mint a VA-ban)
+  document.getElementById("app-donate-btn")?.addEventListener("click", () => {
+    window.electronAPI?.openExternal("https://www.c64va.pro/register/donate.php?lang=" + (currentLanguage === "hu" ? "hu" : "en"));
+  });
   document.getElementById("app-about-btn").addEventListener("click", async () => {
     const [version, vmaVersion] = await Promise.all([
       Promise.resolve(window.__TAURI__?.app?.getVersion?.()).catch(() => null),

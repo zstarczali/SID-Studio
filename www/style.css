@@ -493,6 +493,8 @@ a {
 .main-tb-icon-btn svg {
   display: block;
 }
+/* Donation (c64va.pro register/donate.php a böngészőben) — rózsaszín szív, mint a VA-ban */
+.donate-tb-btn svg { color: #e05577; }
 .main-tb-btn--active {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
