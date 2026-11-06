@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 - 2026-11-06
+
+- Donation: a new toolbar button (the pink heart) opens the donation page on c64va.pro in the browser, where you can support the development with any amount through PayPal, as in Visual Assembler.
+
 ## 1.4.0 - 2026-11-05
 
 - Amiga and tracker modules in the SID Player: the new **Modland** panel searches the Modland collection (about 177,000 playable modules: Protracker, Soundtracker, OctaMED, Oktalyzer, Future Composer, Digibooster, Fasttracker 2, Screamtracker, Impulse Tracker and others) by title, composer or format, like the HVSC panel. Modules are downloaded one by one and cached. Dropped `.mod`, `.xm`, `.s3m`, `.it`, `.med` … files play too. The modules play with libopenmpt 0.8.10 (WebAssembly, in a worker); seeking, pausing, subsongs, the volume and the spectrum work as with SID tunes.
