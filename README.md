@@ -1,6 +1,8 @@
 # VA SID Studio
 
-<img src="www/assets/logo-about.png" alt="VA SID Studio logo" width="300">
+<p align="center">
+  <img src="www/assets/logo-about.png" alt="VA SID Studio logo">
+</p>
 
 A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vanilla JS, Rust), extracted from
 [C64 Visual Assembler](https://www.c64va.pro/).
