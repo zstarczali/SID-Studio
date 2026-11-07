@@ -74,6 +74,37 @@ class PublishTests(unittest.TestCase):
                 with patch.object(publish.json, 'load', return_value=run), self.assertRaises(ValueError):
                     publish.validate_run()
 
+    def test_old_build_uses_pdf_from_its_source_commit(self):
+        self.artifact('studio.exe')
+        manual = self.root.parent / (self.root.name + '-manual.pdf')
+        manual.write_bytes(b'%PDF-1.7\nsource-build-manual')
+        self.addCleanup(manual.unlink)
+        with patch.dict(os.environ, {'SID_MANUAL_PATH': str(manual)}):
+            files = publish.collect_files(self.root)
+        self.assertEqual(files[publish.MANUAL], manual)
+        self.assertIn('studio.exe', files)
+
+    def test_artifact_manual_takes_precedence_over_fallback(self):
+        self.artifact('studio.exe')
+        manual = self.artifact('manual/' + publish.MANUAL)
+        with patch.dict(os.environ, {'SID_MANUAL_PATH': '/missing/fallback.pdf'}):
+            self.assertEqual(publish.collect_files(self.root)[publish.MANUAL], manual)
+
+    def test_rejects_invalid_fallback_pdf(self):
+        self.artifact('studio.exe')
+        invalid = self.artifact('not-a-pdf.txt')
+        with patch.dict(os.environ, {'SID_MANUAL_PATH': str(invalid)}):
+            with self.assertRaisesRegex(ValueError, 'not a PDF'):
+                publish.collect_files(self.root)
+
+    def test_source_build_commit_is_passed_to_manual_checkout(self):
+        output = self.root / 'github-output'
+        run = {'path': '.github/workflows/build-installers.yml', 'status': 'completed', 'conclusion': 'success', 'head_sha': 'a' * 40}
+        env = {'BUILD_RUN_ID': '123', 'GH_REPOSITORY': 'owner/repo', 'GH_TOKEN': 'test-only', 'GITHUB_OUTPUT': str(output)}
+        with patch.dict(os.environ, env), patch.object(publish.urllib.request, 'urlopen'), patch.object(publish.json, 'load', return_value=run):
+            publish.validate_run()
+        self.assertEqual(output.read_text(), 'head_sha=' + 'a' * 40 + '\n')
+
 
 if __name__ == '__main__':
     unittest.main()
