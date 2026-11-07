@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.5.1**
+**Version 1.6.0**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -13,6 +13,7 @@ VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It
 - [3. High Voltage SID Collection](#3-high-voltage-sid-collection)
 - [3b. Modland: Amiga and tracker modules](#3b-modland-amiga-and-tracker-modules)
 - [4. Spectrum analyzer](#4-spectrum-analyzer)
+  - [Channel curves](#channel-curves)
 - [5. SID Editor overview](#5-sid-editor-overview)
 - [6. Instruments](#6-instruments)
 - [7. Tracker](#7-tracker)
@@ -79,7 +80,7 @@ The window is called **MOD Player** while a module plays (and, when nothing play
 |---|---|
 | Transport | Previous, Play, Pause, Stop, Next, Shuffle |
 | Subtunes and seek | Play subtunes in sequence, Back 10 s, Forward 10 s |
-| Tools | Spectrum analyzer, Normalize volume, HVSC, Modland, Add .sid files or modules, Open playlist, Save playlist, Clear playlist |
+| Tools | Spectrum analyzer, Channel curves, Normalize volume, HVSC, Modland, Add .sid files or modules, Open playlist, Save playlist, Clear playlist |
 | Volume | **Master volume** knob, shared with the SID Editor |
 
 ### Playlist
@@ -98,7 +99,7 @@ The window is called **MOD Player** while a module plays (and, when nothing play
 - **Play subtunes in sequence:** the list-and-play button before **Back 10 s** enables automatic playback of the remaining songs inside the current file. It is on by default and highlighted when enabled; the app remembers your choice across restarts. Starting from the selected subtune, playback advances to the next subtune in numerical order, then to the next playlist file after the final subtune. This also works with a single SID file and with **Shuffle** enabled; shuffle chooses the next file after its remaining subtunes have played. Turn the button off to advance directly to the next playlist file instead. The manual **Next** button always skips to the next file.
 - **When a tune ends:** automatic advancement uses the current subtune's HVSC length when available, or the module's known length. Without a known length it advances after 3 minutes. For a SID file, any remaining subtunes play first when **Play subtunes in sequence** is on. At the end of the playlist, with shuffle off, the final SID subtune keeps playing until you stop it; the last module stops at its end.
 - **Modules with several songs** (some `.xm`, `.it` and game modules) show the same **‹ 1 / 3 ›** once the module has started.
-- **Normalize volume** (the button after the spectrum analyzer) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. The button can be switched while a tune plays.
+- **Normalize volume** (the button after Channel curves) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. The button can be switched while a tune plays.
 
 ---
 
@@ -146,7 +147,23 @@ Not every Modland format plays: the players of many Amiga formats (TFMX, Jochen 
 
 The **Spectrum analyzer** button opens a window with LED-style bars. It analyzes the sound that is playing, from the SID Player or the SID Editor. **Bands** sets 8, 16, 24 or 32 bands. The window can be moved and resized, and it closes and reopens together with the SID Player.
 
-The SID Editor has a different, per-voice display: see [Channel spectrum](#channel-spectrum).
+The **Mix / Channels** selector chooses the display:
+
+- **Mix** shows the frequency spectrum of the mixed audio output.
+- **Channels** shows separate panels beside one another, wrapping into more rows when needed. For SID tunes, each voice has a spectrum estimated from its played registers and envelope. Two SID chips produce six voice panels, labelled by chip and voice. This estimate does not reproduce ring modulation, sync or filter resonance.
+- For MOD and other tracker modules, **Channels** shows a separate **VU** level meter for each module channel. These are level meters, not per-channel frequency spectra.
+
+Drag the header to move the window. Drag the small lower-right grip to resize it; a focused grip also accepts arrow keys. The size, position and selected view are remembered. The SID Editor also has its own tracker-only display: see [Channel spectrum](#channel-spectrum).
+
+### Channel curves
+
+The **Channel curves** toolbar button, beside the spectrum button in the player and editor, toggles a shared window. It displays a scrolling level curve and a large note name for each channel, following the scheduled playback rather than the audio rendered ahead of it.
+
+- **SID files:** one row per voice, including all six voices of a two-SID tune. The curve is an estimated envelope/level derived from SID registers; the note name follows the register frequency.
+- **SID Editor:** the voices of the playing tracker use the same window. Keyboard note previews are not shown.
+- **MOD and other tracker modules:** one row per module channel, with libopenmpt VU levels and the most recent note from the pattern rows. Pitch slides, vibrato and other effects do not update this row-note label continuously.
+
+The curves show level history, not an oscilloscope waveform. A dash indicates a silent channel. Drag the header to move the window, and use the small lower-right grip to resize it. The position, size and open/closed state survive restarting the app. Pressing either Channel curves toolbar button again, the close button or Escape closes it; both toolbar buttons follow the same window state.
 
 ---
 
@@ -307,6 +324,7 @@ Pasting starts at the cursor and stops at the edges of the pattern; it does not 
 | **Preview row** | Plays the selected row on all voices. |
 | **Copy, Paste, Clear** | Work on the selection. |
 | **Horizontal tracker** | Opens the [horizontal tracker](#11-horizontal-tracker). |
+| **Channel curves** | Toggles the shared [level curves and note names](#channel-curves). |
 | **Channel spectrum** | Opens the [per-voice display](#channel-spectrum). |
 | **Detach tracker** | Moves the tracker into its own window. |
 | **Record, Play, Stop, Pause, Metronome** | See [Playback](#10-playback-and-its-displays) and [Recording](#recording). |

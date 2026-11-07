@@ -31,7 +31,8 @@ function setupDraggableEditorDialogs() {
   const dialogs = [
     ["websid-play-dialog", ".websid-play-header"],
     ["sid-editor-dialog", ".sid-hdr"],
-    ["sid-viz-dialog", ".sid-viz-hdr"]
+    ["sid-viz-dialog", ".sid-viz-hdr"],
+    ["channel-monitor", ".channel-monitor-header"]
   ];
   dialogs.forEach(function(entry) {
     const dialogId = entry[0];
@@ -4859,9 +4860,44 @@ function _sidVizReadLevels() {
   return levels;
 }
 
+function _sidVizDrawChannels(canvas) {
+  _sidAnaAttach();
+  const ext = _sidExternalCore;
+  const frame = ext?.active ? _channelMonitorFrame(ext) : null;
+  if (!ext && _sidWaPlay) _sidAnaAdvance(performance.now());
+  const regs = frame?.regs || (!ext && _sidWaPlay ? _sidAna.last : null);
+  const env = ext ? ext.monitorEnv : _sidAna.env;
+  const moduleVoices = frame?.voices;
+  const count = regs ? Math.floor(regs.length / 25) * 3 : moduleVoices?.length || 0;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(canvas.clientWidth * dpr)), H = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  ctx.font = Math.round(11 * dpr) + "px 'IBM Plex Mono', monospace";
+  ctx.textBaseline = "top";
+  if (!count) { ctx.fillStyle = "#aab5c5"; ctx.fillText(t("channelMonitorIdle"), 12 * dpr, 12 * dpr); return; }
+  const cols = Math.min(count, Math.max(3, Math.floor(W / (120 * dpr))));
+  const rows = Math.ceil(count / cols), cw = W / cols, ch = H / rows, pad = 8 * dpr;
+  for (let v = 0; v < count; v++) {
+    const chip = Math.floor(v / 3), bit = v % 3;
+    const x = v % cols * cw + pad, y = Math.floor(v / cols) * ch + pad;
+    ctx.fillStyle = "#aab5c5";
+    ctx.fillText(regs ? "S" + (chip + 1) + " V" + (bit + 1) : "CH " + (v + 1) + " · VU", x, y);
+    const levels = regs ? _sidAnaVoiceLevels(regs, chip * 25, bit, env?.[v]?.env || 0, _sidVizBands) : [Math.min(1, moduleVoices[v].level || 0)];
+    const bw = (cw - pad * 2) / levels.length, bh = Math.max(1, ch - pad * 2 - 20 * dpr) / 10;
+    for (let b = 0; b < levels.length; b++) for (let r = 0; r < 10; r++) {
+      const on = Math.max(.06, Math.min(1, levels[b] * 10 - r));
+      ctx.fillStyle = "hsla(" + _sidVizRowHue(r, 10) + ",82%,52%," + on + ")";
+      ctx.fillRect(x + b * bw + bw * .1, y + 20 * dpr + (9 - r) * bh, bw * .8, bh * .82);
+    }
+  }
+}
+
 function _sidVizDraw() {
   const canvas = document.getElementById("sid-viz-canvas");
   if (!canvas) return;
+  if (document.getElementById("sid-viz-mode")?.value === "channels") { _sidVizDrawChannels(canvas); return; }
   const dpr = window.devicePixelRatio || 1;
   const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -5053,7 +5089,7 @@ function _sidAnaVoiceLevels(regs, at, bit, env, bands) {
 // A playing engine records its frames while the window is open.
 function _sidAnaAttach() {
   const box = document.getElementById("sid-ana");
-  const on = !!box && !box.hidden;
+  const on = (!!box && !box.hidden) || !!document.getElementById("channel-monitor")?.open || (!!document.getElementById("sid-viz-dialog")?.open && document.getElementById("sid-viz-mode")?.value === "channels");
   if (_sidWaPlay && _sidWaPlay.e) {
     if (on && !_sidWaPlay.e.snap) _sidWaPlay.e.snap = [];
     if (!on) _sidWaPlay.e.snap = null;
@@ -5163,6 +5199,7 @@ function _sidSetupAna() {
   const box = document.getElementById("sid-ana");
   const hdr = box && box.querySelector(".sid-trk-float-hdr");
   if (!box || !hdr) return;
+  _sidSetupResizeHandle(box);
   document.getElementById("sid-ana-btn")?.addEventListener("click", function() { _sidAnaShow(box.hidden); });
   document.getElementById("sid-ana-close")?.addEventListener("click", function() { _sidAnaShow(false); });
   let move = null, sizeAtDown = null;
@@ -5186,15 +5223,78 @@ function _sidSetupAna() {
   });
 }
 
+// Explicit grip: WebKit on macOS does not reliably expose CSS resize handles.
+function _sidSetupResizeHandle(element) {
+  if (!element || element.querySelector(":scope > .sid-resize-grip")) return;
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.className = "sid-resize-grip";
+  grip.setAttribute("aria-label", "Resize");
+  grip.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 10l7-7M7 10l3-3"/></svg>';
+  element.appendChild(grip);
+  let start = null;
+  grip.addEventListener("pointerdown", function(event) {
+    if (event.button !== 0) return;
+    const owner = element.closest?.("dialog");
+    if (owner && owner !== element) {
+      const at = owner.getBoundingClientRect();
+      owner.style.left = at.left + "px";
+      owner.style.top = at.top + "px";
+      owner.style.transform = "none";
+      owner.style.margin = "0";
+    }
+    const rect = element.getBoundingClientRect();
+    start = { x: event.clientX, y: event.clientY, w: rect.width, h: rect.height };
+    grip.setPointerCapture(event.pointerId);
+    event.preventDefault(); event.stopPropagation();
+  });
+  grip.addEventListener("pointermove", function(event) {
+    if (!start) return;
+    const rect = element.getBoundingClientRect();
+    element.style.width = Math.max(280, Math.min(window.innerWidth - rect.left - 8, start.w + event.clientX - start.x)) + "px";
+    element.style.height = Math.max(160, Math.min(window.innerHeight - rect.top - 8, start.h + event.clientY - start.y)) + "px";
+  });
+  const saveSize = function() {
+    if (!element.offsetWidth || !element.offsetHeight) return;
+    if (element.id === "sid-ana") _sidAnaSave({ width: element.offsetWidth, height: element.offsetHeight });
+    else if (element.classList.contains("sid-viz-card")) _sidVizSave({ w: element.offsetWidth, h: element.offsetHeight });
+    else if (element.classList.contains("channel-monitor-card")) {
+      try { localStorage.setItem("c64va-channel-monitor-size", JSON.stringify({ w: element.offsetWidth, h: element.offsetHeight })); } catch (_) {}
+    }
+  };
+  const end = function() { if (start) saveSize(); start = null; };
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+  grip.addEventListener("lostpointercapture", end);
+  grip.addEventListener("keydown", function(event) {
+    const dx = event.key === "ArrowRight" ? 20 : event.key === "ArrowLeft" ? -20 : 0;
+    const dy = event.key === "ArrowDown" ? 20 : event.key === "ArrowUp" ? -20 : 0;
+    if (!dx && !dy) return;
+    event.preventDefault();
+    element.style.width = Math.max(280, element.offsetWidth + dx) + "px";
+    element.style.height = Math.max(160, element.offsetHeight + dy) + "px";
+    saveSize();
+  });
+}
+
 function setupSidVisualizer() {
   const dlg = document.getElementById("sid-viz-dialog");
   if (!dlg) return;
   document.getElementById("websid-play-viz")?.addEventListener("click", _sidVizToggle);
+  const mode = document.getElementById("sid-viz-mode");
+  if (mode) {
+    mode.setAttribute("aria-label", t("sidVizView"));
+    mode.options[0].textContent = t("sidVizMix");
+    mode.options[1].textContent = t("sidVizChannels");
+    mode.value = _sidVizState().mode === "channels" ? "channels" : "mix";
+    mode.addEventListener("change", function() { _sidVizSave({ mode: mode.value }); _sidAnaAttach(); });
+  }
   document.getElementById("sid-viz-close")?.addEventListener("click", function() { dlg.close(); });
   document.getElementById("sid-viz-bands")?.addEventListener("change", function(e) { _sidVizSetBands(Number(e.target.value)); });
   dlg.addEventListener("keydown", function(e) { if (e.key === "Escape") { e.preventDefault(); dlg.close(); } });
   dlg.addEventListener("close", function() {
     if (dlg.open) return;
+    _sidAnaAttach();
     if (_sidVizRaf) { cancelAnimationFrame(_sidVizRaf); _sidVizRaf = 0; }
     _sidVizSyncButton();
     // closed together with the player: it reopens with the player
@@ -5202,6 +5302,7 @@ function setupSidVisualizer() {
     _sidVizWithPlayer = false;
   });
   const card = dlg.querySelector(".sid-viz-card");
+  _sidSetupResizeHandle(card);
   if (card && typeof ResizeObserver !== "undefined") {
     new ResizeObserver(function() {
       if (dlg.open) _sidVizSave({ w: Math.round(card.offsetWidth), h: Math.round(card.offsetHeight) });
@@ -5258,9 +5359,10 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
     state.normGain = gain;
     if (_playerNormalize && _playerNormNode) _playerNormNode.gain.setTargetAtTime(gain, Math.max(at, ac.currentTime), 2);
   };
-  const schedule = function(pcm, channels) {
+  const schedule = function(pcm, channels, monitor, frameRate) {
     const samples = pcm.length / channels;
     state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
+    if (monitor) _channelMonitorQueue(state, state.nextTime, monitor, frameRate);
     _sidPlayBuffer(pcm, state.nextTime, _sidExtSources, channels, output);
     state.nextTime += samples / ac.sampleRate;
   };
@@ -5284,17 +5386,17 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
         _normMeterAdd(state.meter, pcm, rendered.channels, ac.sampleRate);
         if (!state.warm) {
           // so the tune starts at its level
-          state.held.push({ pcm, channels: rendered.channels });
+          state.held.push({ pcm, channels: rendered.channels, monitor: rendered.monitor, frameRate: rendered.frameRate });
           if (state.meter.frames < ac.sampleRate * 2) continue;
           state.warm = true;
           state.normGain = _playerNormGain({ loudness: _normLoudness(state.meter.blocks), peak: state.meter.peak });
           _playerNormApply(false);
-          state.held.forEach(function(h) { schedule(h.pcm, h.channels); });
+          state.held.forEach(function(h) { schedule(h.pcm, h.channels, h.monitor, h.frameRate); });
           state.held = [];
           continue;
         }
         const at = state.nextTime;
-        schedule(pcm, rendered.channels);
+        schedule(pcm, rendered.channels, rendered.monitor, rendered.frameRate);
         follow(at);
         // A Web Audio szál előre ütemezett hangja UI-terhelés alatt is tovább szól.
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < aheadTarget);
@@ -5330,9 +5432,13 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
 // The scheduled audio is dropped; forward seeks continue the session, backward
 // ones restart the tune in a new session and skip to the target.
 async function _vaSidSeek(state, targetMs) {
+  state.monitor = [];
+  state.monitorEnv = [];
+  state.monitorFrame = null;
   state.seeking = true;
   try {
     while (state.busy) await state.queue.catch(function() {});
+    state.monitor = [];
     if (!state.active) return;
     _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
     _sidExtSources.clear();
@@ -5566,6 +5672,7 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
         if (!out.frames) { state.ended = true; break; }
         state.renderedMs += out.frames * 1000 / ac.sampleRate;
         state.nextTime = Math.max(state.nextTime, ac.currentTime + 0.02);
+        if (out.monitor) _channelMonitorQueue(state, state.nextTime, out.monitor);
         _sidPlayBuffer(out.pcm, state.nextTime, _sidExtSources, 2, output);
         state.nextTime += out.frames / ac.sampleRate;
       } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < _MOD_AHEAD_SECONDS);
@@ -5595,9 +5702,13 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
 }
 
 async function _modSeek(state, targetMs) {
+  state.monitor = [];
+  state.monitorEnv = [];
+  state.monitorFrame = null;
   state.seeking = true;
   try {
     while (state.busy) await state.queue.catch(function() {});
+    state.monitor = [];
     if (!state.active) return;
     _sidExtSources.forEach(function(src){ try { src.stop(); } catch (_) {} });
     _sidExtSources.clear();

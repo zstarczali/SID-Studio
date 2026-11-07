@@ -1,5 +1,10 @@
 const translations = {
  "hu": {
+  "sidVizView": "Nézet",
+  "sidVizMix": "Keverék",
+  "sidVizChannels": "Csatornák",
+  "channelMonitorTitle": "Csatornagörbék",
+  "channelMonitorIdle": "Nincs lejátszás",
   "themeLight": "Világos",
   "themeDark": "Sötét",
   "themeChristmas": "Karácsony",
@@ -400,6 +405,11 @@ const translations = {
   "aboutVmaVersionLabel": "VMA fordító verzió:"
  },
  "en": {
+  "sidVizView": "View",
+  "sidVizMix": "Mix",
+  "sidVizChannels": "Channels",
+  "channelMonitorTitle": "Channel curves",
+  "channelMonitorIdle": "No playback",
   "themeLight": "Light",
   "themeDark": "Dark",
   "themeChristmas": "Christmas",

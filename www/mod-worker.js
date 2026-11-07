@@ -16,6 +16,7 @@ let mod = 0;
 let bufL = 0;
 let bufR = 0;
 let bufFrames = 0;
+let monitorNotes = [];
 
 function libReady(base) {
   return new Promise(function(resolve, reject) {
@@ -75,6 +76,7 @@ function closeModule() {
 
 function openModule(bytes, song) {
   closeModule();
+  monitorNotes = [];
   const data = new Uint8Array(bytes);
   const ptr = lib._malloc(Math.max(1, data.length));
   u8().set(data, ptr);
@@ -150,8 +152,9 @@ function render(frames, rate) {
   // libopenmpt can return fewer frames than asked before the end: read on until full or ended
   const pcm = new Float32Array(frames * 2);
   let done = 0;
+  const monitor = [];
   while (done < frames) {
-    const got = lib._openmpt_module_read_float_stereo(mod, rate, frames - done, bufL, bufR);
+    const got = lib._openmpt_module_read_float_stereo(mod, rate, Math.min(frames - done, Math.max(1, Math.round(rate / 50))), bufL, bufR);
     if (got <= 0) break;
     const left = new Float32Array(memory.buffer, bufL, got);
     const right = new Float32Array(memory.buffer, bufR, got);
@@ -159,9 +162,18 @@ function render(frames, rate) {
       pcm[(done + i) * 2] = left[i];
       pcm[(done + i) * 2 + 1] = right[i];
     }
+    const pattern = lib._openmpt_module_get_current_pattern(mod);
+    const row = lib._openmpt_module_get_current_row(mod);
+    const voices = [];
+    for (let c = 0; c < lib._openmpt_module_get_num_channels(mod); c++) {
+      const note = libString(lib._openmpt_module_format_pattern_row_channel_command(mod, pattern, row, c, 0));
+      if (note && !/^(\.+|---|\s*)$/.test(note)) monitorNotes[c] = note;
+      voices.push({ note: monitorNotes[c] || "—", level: lib._openmpt_module_get_current_channel_vu_mono(mod, c) });
+    }
+    monitor.push({ offset: done / rate, voices });
     done += got;
   }
-  return { pcm: done === frames ? pcm : pcm.slice(0, done * 2), frames: done };
+  return { pcm: done === frames ? pcm : pcm.slice(0, done * 2), frames: done, monitor };
 }
 
 let ready = null;
@@ -173,7 +185,7 @@ function handle(msg) {
     switch (msg.cmd) {
       case "open": return openModule(msg.bytes, msg.song);
       case "render": return render(msg.frames, msg.rate);
-      case "seek": if (!mod) throw new Error("no module"); return lib._openmpt_module_set_position_seconds(mod, Math.max(0, Number(msg.seconds) || 0));
+      case "seek": monitorNotes = []; if (!mod) throw new Error("no module"); return lib._openmpt_module_set_position_seconds(mod, Math.max(0, Number(msg.seconds) || 0));
       case "close": closeModule(); return true;
       default: throw new Error("unknown command: " + msg.cmd);
     }

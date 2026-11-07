@@ -2344,3 +2344,39 @@ html[data-theme="christmas"] .websid-play-item--current .websid-play-item-del {
   color: #ffffff;
 }
 html[data-theme="christmas"] .splash-loader-bar { background: var(--xm-garland); }
+
+.channel-monitor-dialog { width: fit-content; right: auto; }
+.channel-monitor-card {
+  position: relative; width: 680px; height: 330px;
+  min-width: 340px; min-height: 180px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+  box-sizing: border-box; overflow: hidden;
+}
+.channel-monitor-header { flex: none; }
+.channel-monitor-rows { flex: 1; min-height: 0; overflow: auto; padding: 4px 12px 14px; }
+.channel-monitor-row {
+  display: grid; grid-template-columns: 62px 76px minmax(0, 1fr);
+  align-items: center; gap: 12px; min-height: 70px;
+  border-bottom: 1px solid var(--panel-border);
+  font-family: "IBM Plex Mono", monospace; font-size: 0.74rem;
+}
+.channel-monitor-row > span { color: var(--secondary); font-size: 0.68rem; }
+.channel-monitor-row > b { color: var(--text); font-weight: 600; font-size: 1.35rem; line-height: 1.2; }
+.channel-monitor-row[hidden] { display: none; }
+.channel-monitor-row canvas { display: block; width: 100%; height: 64px; min-width: 0; }
+.channel-monitor-rows:empty { display: grid; place-items: center; }
+.channel-monitor-rows:empty::after { content: attr(data-empty); color: var(--secondary); font-size: 0.78rem; }
+.sid-viz-card { position: relative; resize: none; }
+.sid-ana { resize: none; }
+.sid-resize-grip {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  min-width: 0; min-height: 0; padding: 2px; margin: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 0; box-shadow: none;
+  background: transparent; color: var(--secondary); opacity: .5;
+  cursor: nwse-resize; touch-action: none; z-index: 5;
+}
+.sid-resize-grip svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1; }
+.sid-resize-grip:hover, .sid-resize-grip:focus-visible { background: transparent; color: var(--primary); opacity: 1; }
+.sid-viz-mode { width: 108px; min-width: 80px; min-height: 0; height: 24px; padding: 1px 22px 1px 8px; font-size: .75rem; margin-left: auto; }
+.sid-viz-mode + .sid-viz-bands { margin-left: 0; }
