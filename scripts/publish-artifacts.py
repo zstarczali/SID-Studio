@@ -2,6 +2,7 @@
 import ftplib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import ssl
 import sys
@@ -77,6 +78,32 @@ def safe_error(error):
     return ' '.join(message.splitlines())[:600]
 
 
+
+def remove_previous_installers(ftp, files, directory):
+    pattern = re.compile(r'^VA SID Studio[_-](\d+)\.(\d+)\.(\d+)[_-].*\.(?:exe|msi|dmg|deb|rpm|appimage)$', re.IGNORECASE)
+    def version(name):
+        match = pattern.fullmatch(name)
+        return tuple(map(int, match.groups())) if match else None
+    releases = {version(name) for name in files if version(name) is not None}
+    if not releases:
+        return
+    if len(releases) != 1:
+        raise ValueError('Refusing cleanup: the uploaded installers contain multiple release versions.')
+    current = releases.pop()
+    removed = 0
+    for entry in ftp.nlst():
+        path = PurePosixPath(entry)
+        if len(path.parts) > 1 and path.parent != directory:
+            continue
+        name = path.name
+        previous = version(name)
+        if name in files or previous is None or previous >= current:
+            continue
+        print(f'Removing previous installer: {name}', flush=True)
+        ftp.delete(name)
+        removed += 1
+    print(f'Removed {removed} previous installers.', flush=True)
+
 def upload(root):
     files = collect_files(root)
     password = os.environ.get('FTP_PASSWORD', '')
@@ -122,6 +149,8 @@ def upload(root):
                 ftp.voidcmd('TYPE I')
                 if ftp.size(name) != path.stat().st_size:
                     raise ValueError(f'Remote size verification failed: {name}')
+            stage = 'removing previous installers'
+            remove_previous_installers(ftp, files, directory)
     except (ftplib.Error, OSError, EOFError) as error:
         raise ValueError(f'FTP {stage}: {safe_error(error)}') from None
     print(f'Published {len(files)} files. Existing unrelated files were retained.')
