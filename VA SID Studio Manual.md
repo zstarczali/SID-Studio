@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.5.0**
+**Version 1.5.1**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -46,6 +46,7 @@ The app is an empty workspace with a toolbar of icon buttons. Everything else fl
 | **Manual** | Opens this manual as a PDF, in your system's PDF viewer. |
 | **Check for update** | Looks for a new version, and downloads and installs it if you agree. The app restarts afterwards. It also looks at every start; **Skip this version** stops the question, the button stays lit. |
 | **About** | Shows the version, the links and the license. |
+| **Donation** | The pink heart appears after 10 minutes in each app session. It opens the donation page on c64va.pro in your browser, where you can support development through PayPal. The timer starts again whenever you launch the app. |
 | **Exit** | Saves the tune and the playlist, then closes the app. |
 
 **To listen to a tune:** open the SID Player, press **+** and choose a `.sid` file, then click the tune in the list.
@@ -77,7 +78,7 @@ The window is called **MOD Player** while a module plays (and, when nothing play
 | Group | Buttons |
 |---|---|
 | Transport | Previous, Play, Pause, Stop, Next, Shuffle |
-| Seek | Back 10 s, Forward 10 s |
+| Subtunes and seek | Play subtunes in sequence, Back 10 s, Forward 10 s |
 | Tools | Spectrum analyzer, Normalize volume, HVSC, Modland, Add .sid files or modules, Open playlist, Save playlist, Clear playlist |
 | Volume | **Master volume** knob, shared with the SID Editor |
 
@@ -94,7 +95,8 @@ The window is called **MOD Player** while a module plays (and, when nothing play
 
 - Drag the **position bar** or use **Back / Forward 10 s** to seek. The skipped part runs silently, so a long jump can take a moment.
 - A file with several songs shows **‹ 1 / 3 ›** next to its details, to step between subtunes.
-- **When a tune ends:** an HVSC tune and a module have a known length, so the list moves on when they end. Any other tune moves on after 3 minutes. The last tune in the list keeps playing until you stop it; the last module stops at its end.
+- **Play subtunes in sequence:** the list-and-play button before **Back 10 s** enables automatic playback of the remaining songs inside the current file. It is on by default and highlighted when enabled; the app remembers your choice across restarts. Starting from the selected subtune, playback advances to the next subtune in numerical order, then to the next playlist file after the final subtune. This also works with a single SID file and with **Shuffle** enabled; shuffle chooses the next file after its remaining subtunes have played. Turn the button off to advance directly to the next playlist file instead. The manual **Next** button always skips to the next file.
+- **When a tune ends:** automatic advancement uses the current subtune's HVSC length when available, or the module's known length. Without a known length it advances after 3 minutes. For a SID file, any remaining subtunes play first when **Play subtunes in sequence** is on. At the end of the playlist, with shuffle off, the final SID subtune keeps playing until you stop it; the last module stops at its end.
 - **Modules with several songs** (some `.xm`, `.it` and game modules) show the same **‹ 1 / 3 ›** once the module has started.
 - **Normalize volume** (the button after the spectrum analyzer) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. The button can be switched while a tune plays.
 
