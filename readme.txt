@@ -1,9 +1,16 @@
-VA SID STUDIO - INSTALLATION GUIDE
+VA SID STUDIO 1.6.0 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
+
+New in 1.6.0: Channel curves and note names for SID and tracker modules,
+separate channel views in the spectrum analyzer, and improved window
+moving/resizing on macOS. Channel curves remembers whether it was open,
+as well as its position and size. See CHANGELOG.md for release notes and
+VA SID Studio Manual.md (or docs/VA SID Studio Manual.pdf) for full usage.
+Upgrading keeps your saved settings and edited tune in application storage.
 
 1. DOWNLOADING PREBUILT INSTALLERS
 ---------------------------------

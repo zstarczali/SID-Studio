@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0 - 2026-11-07
+
+- Channel curves: a shared toolbar window in the SID Player and SID Editor shows a scrolling level curve and a large note name for every channel. Works with SID tunes, tracker playback and MOD/tracker modules; a two-SID tune shows all six voices. SID levels are estimated from the played registers and envelope; module levels come from libopenmpt channel VU values, with note names from pattern rows.
+- The Channel curves toolbar button toggles the window and follows its actual visibility. The open/closed state, window position and size are remembered across restarts.
+- Spectrum analyzer: a Mix / Channels selector switches between the mixed audio spectrum and separate channel panels. SID channel spectra are estimated from registers; module channel panels show VU levels, not individual frequency spectra. Multiple SID chips are displayed separately.
+- Window controls: Channel curves follows the app theme and uses the shared draggable header. Small explicit resize grips work independently of macOS WebKit's native resize handle; analyzer window sizes are saved after pointer and keyboard resizing.
+
 ## 1.5.1 - 2026-11-07
 
 - SID Player: automatically plays the remaining subtunes of a SID file in sequence before moving to the next playlist entry, including with shuffle enabled. A new toolbar toggle enables or disables this behavior and remembers the setting across restarts. Uses HVSC subtune lengths when available, otherwise three minutes per subtune.

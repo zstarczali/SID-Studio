@@ -563,6 +563,14 @@ impl SidFilePlayer {
         Ok(count)
     }
 
+    pub fn channel_registers(&self) -> Vec<u8> {
+        let mut regs = self.machine.sid_regs[..25].to_vec();
+        for sid in &self.machine.extra_sids {
+            regs.extend_from_slice(&sid.regs[..25]);
+        }
+        regs
+    }
+
     pub fn frame_rate(&self) -> f64 {
         self.frame_rate
     }

@@ -96,6 +96,11 @@ test("render gives interleaved stereo with sound, then nothing at the end", asyn
   const out = await call("render", { frames: 4800, rate: 48000 });
   assert.equal(out.frames, 4800);
   assert.equal(out.pcm.length, 9600);
+  assert.equal(out.monitor.length, 5);
+  assert.equal(out.monitor[0].voices.length, 4);
+  assert.ok(out.monitor.some(frame => frame.voices[0].level > 0));
+  assert.ok(out.monitor.some(frame => /C/.test(frame.voices[0].note)));
+  assert.equal(out.monitor[1].offset, 0.02);
   const peak = out.pcm.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
   assert.ok(peak > 0.05, "the note sounds: " + peak);
   // Amiga panning: channel 0 is hard left

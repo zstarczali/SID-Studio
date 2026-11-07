@@ -356,6 +356,13 @@ code {
     });
   </script>
 <h1 id="changelog">Changelog</h1>
+<h2 id="160---2026-11-07">1.6.0 - 2026-11-07</h2>
+<ul>
+<li>Channel curves: a shared toolbar window in the SID Player and SID Editor shows a scrolling level curve and a large note name for every channel. Works with SID tunes, tracker playback and MOD/tracker modules; a two-SID tune shows all six voices. SID levels are estimated from the played registers and envelope; module levels come from libopenmpt channel VU values, with note names from pattern rows.</li>
+<li>The Channel curves toolbar button toggles the window and follows its actual visibility. The open/closed state, window position and size are remembered across restarts.</li>
+<li>Spectrum analyzer: a Mix / Channels selector switches between the mixed audio spectrum and separate channel panels. SID channel spectra are estimated from registers; module channel panels show VU levels, not individual frequency spectra. Multiple SID chips are displayed separately.</li>
+<li>Window controls: Channel curves follows the app theme and uses the shared draggable header. Small explicit resize grips work independently of macOS WebKit&#39;s native resize handle; analyzer window sizes are saved after pointer and keyboard resizing.</li>
+</ul>
 <h2 id="151---2026-11-07">1.5.1 - 2026-11-07</h2>
 <ul>
 <li>SID Player: automatically plays the remaining subtunes of a SID file in sequence before moving to the next playlist entry, including with shuffle enabled. A new toolbar toggle enables or disables this behavior and remembers the setting across restarts. Uses HVSC subtune lengths when available, otherwise three minutes per subtune.</li>
@@ -372,29 +379,29 @@ code {
 <li>Normalize volume: a new SID Player button plays every tune, SID or module, at about the same loudness (raised or lowered towards one level, by at most 12 dB, without clipping). A module is measured whole when it opens; a SID tune on its first two seconds, then the level follows it slowly.</li>
 <li>Horizontal tracker: the Paste button pastes at a yellow marker (the last click, or a click on the ruler), which moves past each paste; Ctrl+V pastes at the row under the mouse. Ctrl+V and the other keys also work after a click on a header button.</li>
 <li>Check for update: a new toolbar button, and a check at every start. A new version downloads and installs from the app, which then restarts; Skip this version stops the question at start (the button stays lit). The server can be changed in Settings.</li>
-<li>Christmas theme, offered in December only: night blue, pine green and white, with every button and accent in an ornament's colour. Afterwards the app goes back to the theme you had before.</li>
+<li>Christmas theme, offered in December only: night blue, pine green and white, with every button and accent in an ornament&#39;s colour. Afterwards the app goes back to the theme you had before.</li>
 <li>Exit: a new toolbar button saves the tune and the playlist, then closes the app.</li>
 <li>Playlist name: the name of the <code>.sidpl</code> file you opened or saved shows above the list, and saving offers it as the file name.</li>
-<li>The window's title follows what plays: MOD Player for a module, SID Player for a SID tune; when nothing plays, MOD Player with the Modland panel open.</li>
-<li>About: the module player's license (libopenmpt, BSD-3-Clause).</li>
+<li>The window&#39;s title follows what plays: MOD Player for a module, SID Player for a SID tune; when nothing plays, MOD Player with the Modland panel open.</li>
+<li>About: the module player&#39;s license (libopenmpt, BSD-3-Clause).</li>
 </ul>
 <h2 id="133---2026-11-03">1.3.3 - 2026-11-03</h2>
 <ul>
 <li>Horizontal tracker: select notes with a frame (Shift+drag) or Ctrl+click, then cut, copy, paste or delete them with the new header buttons or Ctrl+X / C / V and Del. A paste goes to the row under the mouse, or to the tracker cursor.</li>
 <li>Quantize: Q or the new button moves the selected notes to the nearest row of the grid (2, 4, 8 or 16 rows, in the tracker toolbar), keeping their lengths. With On record checked, a recording is quantized when it stops.</li>
-<li>Undo and Redo in the horizontal tracker's header too.</li>
+<li>Undo and Redo in the horizontal tracker&#39;s header too.</li>
 <li>Deleting a note keeps the end of the note before it, and a paste over a longer note leaves no stray note-off.</li>
-<li>Delete instruments: − next to + deletes the current instrument (its notes play the one before it, after a question), and Files → Delete unused instruments removes the ones no note plays. The tracker's numbers follow.</li>
-<li>Song volume: Vol, a knob in the tracker toolbar, is the tune's volume; a two-SID tune has one for each chip (SID 1, SID 2). Instruments no longer have a volume of their own, so they cannot override each other's any more; a tune saved earlier takes its first instrument's volume.</li>
-<li>PAL / NTSC: a switch next to BPM. NTSC runs 60 frames a second on the NTSC clock: the preview, the BPM, the exported player's note table and the .sid header follow it.</li>
+<li>Delete instruments: − next to + deletes the current instrument (its notes play the one before it, after a question), and Files → Delete unused instruments removes the ones no note plays. The tracker&#39;s numbers follow.</li>
+<li>Song volume: Vol, a knob in the tracker toolbar, is the tune&#39;s volume; a two-SID tune has one for each chip (SID 1, SID 2). Instruments no longer have a volume of their own, so they cannot override each other&#39;s any more; a tune saved earlier takes its first instrument&#39;s volume.</li>
+<li>PAL / NTSC: a switch next to BPM. NTSC runs 60 frames a second on the NTSC clock: the preview, the BPM, the exported player&#39;s note table and the .sid header follow it.</li>
 </ul>
 <h2 id="132---2026-11-02">1.3.2 - 2026-11-02</h2>
 <ul>
 <li>Linux: the SID Player and the SID Editor stayed silent where the GStreamer plugins were missing. The AppImage now carries them, and the <code>.deb</code> and <code>.rpm</code> packages depend on them.</li>
 <li>Undo and Redo in the SID Editor: two new buttons in the tracker toolbar, or Ctrl+Z and Ctrl+Y, up to 100 steps. A whole recording is one step.</li>
-<li>Tempo: the tracker's tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.</li>
-<li>Moving notes in the horizontal tracker: drag a note's body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice's next note.</li>
-<li>Note length in the horizontal tracker: a note's right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice's next note, instead of deleting it.</li>
+<li>Tempo: the tracker&#39;s tempo field is now called Frames/row: a higher number is slower. BPM next to it shows the resulting tempo.</li>
+<li>Moving notes in the horizontal tracker: drag a note&#39;s body to move it in time and pitch. It keeps its length, instrument and effect, and stops a row short of the voice&#39;s next note.</li>
+<li>Note length in the horizontal tracker: a note&#39;s right end is easy to catch now, even on a one-row note (double arrow cursor, bright bar). It stops at the voice&#39;s next note, instead of deleting it.</li>
 <li>Connect MIDI: on Windows the web view no longer asks for permission in a dialog of its own.</li>
 <li>Loading a .bin: the tracker opens on the selected first song step; a tune whose song does not start with pattern 0 showed pattern 0 instead.</li>
 <li>SID Player Pause: it pauses every time now (a chunk rendered at that moment, or a note from the SID Editor, could switch the sound back on), and pressing it again continues.</li>
@@ -404,18 +411,18 @@ code {
 </ul>
 <h2 id="131---2026-11-02">1.3.1 - 2026-11-02</h2>
 <ul>
-<li>macOS 26: the app icon fills the whole icon shape, with no light frame around it. Building for macOS needs Xcode 26.</li>
+<li>macOS 26: the app icon fills the whole icon shape, with no light frame around it. It is an Icon Composer package (<code>src-tauri/icons/AppIcon.icon</code>), compiled to <code>Assets.car</code> at build time; building for macOS needs Xcode 26. Older macOS versions keep <code>icon.icns</code>.</li>
 <li>readme: what to do about a blank window on Linux with <code>Failed to create GBM buffer</code>.</li>
 </ul>
 <h2 id="130---2026-11-01">1.3.0 - 2026-11-01</h2>
 <h3 id="sid-engine">SID engine</h3>
 <ul>
-<li>reSID in place of WebSID: the SID Player and the SID Editor play on the native backend, on resid-rs (a Rust port of<br>
+<li>reSID in place of WebSID: the SID Player and the SID Editor play on the native backend, on resid-rs (a Rust port of
 reSID, the default) or on VA SID Core, both with the MOS 6581 or 8580. A saved WebSID setting moves to reSID.</li>
 <li>Seeking, stereo 2SID and 3SID tunes and the C64 core work with both engines.</li>
-<li><strong>Play: All</strong> plays the frame-exact JS model of the exported player, like every other preview. The exported player<br>
+<li><strong>Play: All</strong> plays the frame-exact JS model of the exported player, like every other preview. The exported player
 and the <code>.sid</code> export do not change.</li>
-<li><code>src-tauri/vendor/resid-rs</code> is resid-rs 1.1.1 with one fix: the resampler's FIR interpolation overflowed 32 bits<br>
+<li><code>src-tauri/vendor/resid-rs</code> is resid-rs 1.1.1 with one fix: the resampler&#39;s FIR interpolation overflowed 32 bits
 (<code>VENDORED.md</code>).</li>
 <li>SID Player buffer in seconds: the tune is rendered 10, 15, 20 or 30 s ahead.</li>
 <li>About: reSID and resid-rs in place of the WebSID credit.</li>
@@ -434,8 +441,8 @@ and the <code>.sid</code> export do not change.</li>
 </ul>
 <h3 id="window">Window</h3>
 <ul>
-<li>The web view's own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.</li>
-<li>VA-VK: the active window's header was unreadable on the light themes.</li>
+<li>The web view&#39;s own right-click menu (Refresh, Save as, More tools) is gone; text fields keep theirs for copy and paste.</li>
+<li>VA-VK: the active window&#39;s header was unreadable on the light themes.</li>
 <li>SID Editor: the editor itself comes to the front when active, over its floating panels. The VA-VK button brings it back from behind.</li>
 </ul>
 <h3 id="manual">Manual</h3>
@@ -445,37 +452,37 @@ and the <code>.sid</code> export do not change.</li>
 <h2 id="120---2026-11-01">1.2.0 - 2026-11-01</h2>
 <h3 id="two-sids">Two SIDs</h3>
 <ul>
-<li>SID Player: VA SID Core plays PSID v3 / v4 tunes with two or three SIDs, in stereo: SID 1 left, SID 2 right, a<br>
+<li>SID Player: VA SID Core plays PSID v3 / v4 tunes with two or three SIDs, in stereo: SID 1 left, SID 2 right, a
 third SID in the centre. Mono tunes stay mono.</li>
-<li>SID Editor: a tune has one or two SIDs (<code>SID: 1 / 2</code> in the tracker row), so 3 or 6 voices. Tracker, selection,<br>
-paste, keyboard navigation and the horizontal tracker all follow; dropping the second SID asks first if its voices<br>
+<li>SID Editor: a tune has one or two SIDs (<code>SID: 1 / 2</code> in the tracker row), so 3 or 6 voices. Tracker, selection,
+paste, keyboard navigation and the horizontal tracker all follow; dropping the second SID asks first if its voices
 are in use.</li>
-<li>SID Editor: the second SID's address can be set to anything a PSID header can state: <code>$D420</code>-<code>$D7E0</code> and<br>
+<li>SID Editor: the second SID&#39;s address can be set to anything a PSID header can state: <code>$D420</code>-<code>$D7E0</code> and
 <code>$DE00</code>-<code>$DFE0</code>.</li>
 <li>Filter and volume are per SID: a voice drives the filter of its own chip.</li>
 <li>Preview in stereo on VA SID Core and the Web Audio synth; WebSID gets the second SID from the PSID header.</li>
-<li>Export: the <code>.asm</code> and <code>.sid</code> exports have a 6-voice player and a PSID v3 header with the second SID's address.</li>
-<li><code>.sid</code> import: a two-SID tune becomes six voices and keeps its second SID address. With three SIDs the first two<br>
+<li>Export: the <code>.asm</code> and <code>.sid</code> exports have a 6-voice player and a PSID v3 header with the second SID&#39;s address.</li>
+<li><code>.sid</code> import: a two-SID tune becomes six voices and keeps its second SID address. With three SIDs the first two
 are imported, with a notice.</li>
 <li>Save: two-SID tunes use a new <code>.bin</code> format (<code>0xFC</code>). One-SID tunes keep the old format, and old saves still load.</li>
 </ul>
-<p>Limits: the <code>.asm</code> and <code>.sid</code> exports of a two-SID tune hold at most 46 patterns. The UltimateBasic export holds the<br>
+<p>Limits: the <code>.asm</code> and <code>.sid</code> exports of a two-SID tune hold at most 46 patterns. The UltimateBasic export holds the
 first three voices only. The BASIC DATA export numbers its lines further apart for two-SID tunes.</p>
-<h3 id="sid-editor-1">SID Editor</h3>
+<h3 id="sid-editor">SID Editor</h3>
 <ul>
-<li>New channel spectrum window: one 16-band analyzer per voice during tracker playback. It is computed from the played<br>
-registers (frequency, waveform, pulse width, approximated ADSR, filter, volume), not from the audio, so ring<br>
+<li>New channel spectrum window: one 16-band analyzer per voice during tracker playback. It is computed from the played
+registers (frequency, waveform, pulse width, approximated ADSR, filter, volume), not from the audio, so ring
 modulation, sync and filter resonance do not show, and neither do notes played from the keyboard or MIDI.</li>
-<li>Horizontal tracker: the instrument list fills the full width in even columns and scrolls after about four rows. With<br>
+<li>Horizontal tracker: the instrument list fills the full width in even columns and scrolls after about four rows. With
 many instruments it used to squeeze the note view to almost nothing. The help text has its own line.</li>
 <li>Removed the separate <code>New tune</code> button; <code>Files &gt; New tune</code> remains.</li>
 </ul>
 <h3 id="other">Other</h3>
 <ul>
-<li>Settings: the LCD colour, SID engine and SID chip are loaded at startup. They used to wait for the SID Editor's<br>
+<li>Settings: the LCD colour, SID engine and SID chip are loaded at startup. They used to wait for the SID Editor&#39;s
 first opening, so the LCD looked green and the SID Player used WebSID until then.</li>
 <li>About: removed the VICE credit line. The README still states the VICE origin and license of the C64 emulation.</li>
-<li>GitHub Actions: a <code>Build installers</code> workflow for Windows and macOS (x64, ARM64) and Linux (x64), started by hand or<br>
+<li>GitHub Actions: a <code>Build installers</code> workflow for Windows and macOS (x64, ARM64) and Linux (x64), started by hand or
 by a <code>v*</code> tag.</li>
 <li>Tests: two session tests that shared global state no longer run at the same time.</li>
 </ul>
