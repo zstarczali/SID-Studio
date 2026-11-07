@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Validate source build
+        id: source
         run: python3 scripts/publish-artifacts.py --validate-run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,6 +40,17 @@ jobs:
           pattern: va-sid-studio-*
           path: publish-artifacts
 
+      # Older builds have no manual artifact. Use their exact commit's PDF,
+      # rather than a possibly newer manual from the Publish workflow branch.
+      - name: Check out the source build manual
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.head_sha }}
+          path: source-build
+          sparse-checkout: docs/VA SID Studio Manual.pdf
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Upload extracted installers and SID manual
         run: python3 scripts/publish-artifacts.py publish-artifacts
         env:
@@ -46,3 +58,4 @@ jobs:
           FTP_USERNAME: www.c64va.pro
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           FTP_DIRECTORY: /www/downloads/SIDS/
+          SID_MANUAL_PATH: source-build/docs/VA SID Studio Manual.pdf

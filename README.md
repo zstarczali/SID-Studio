@@ -35,8 +35,9 @@ The manual **Publish** workflow takes a successful **Build installers** run ID (
 `VA SID Studio Manual.pdf` directly to `/www/downloads/SIDS/` on `ftpx.forpsi.com`, using explicit
 FTPS with certificate verification. Configure the repository Actions secret `FTP_PASSWORD` for
 the `www.c64va.pro` FTP account before running it. The workflow replaces files with matching
-names and retains other files; it fails if installers or the matching build's manual are missing.
-Builds created before the manual artifact was added must be rebuilt before publishing.
+names and retains other files. If an older build has no manual artifact, Publish takes the PDF
+from that build's exact Git commit instead; rebuilding the installers is not required. It fails
+if no installers are found or neither source supplies the manual.
 A manually dispatched workflow must exist on the default branch to appear in the Actions UI;
 select `development` in **Use workflow from** when publishing from that branch.
 

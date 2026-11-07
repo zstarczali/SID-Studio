@@ -28,7 +28,13 @@ def validate_run():
         raise ValueError('The selected run is not a Build installers run.')
     if run.get('status') != 'completed' or run.get('conclusion') != 'success':
         raise ValueError('The selected build must have completed successfully.')
-    print(f'Validated build {run_id}, commit {run["head_sha"]}.')
+    sha = run['head_sha']
+    if len(sha) != 40 or any(c not in '0123456789abcdef' for c in sha):
+        raise ValueError('Invalid source build commit.')
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            output.write(f'head_sha={sha}\n')
+    print(f'Validated build {run_id}, commit {sha}.')
 
 
 def collect_files(root):
@@ -48,7 +54,17 @@ def collect_files(root):
     if not any(path.suffix.lower() in INSTALLERS for path in files.values()):
         raise ValueError('No installers found in the downloaded artifacts.')
     if MANUAL not in files:
-        raise ValueError('The build has no SID manual artifact. Run Build installers again with manual packaging enabled.')
+        fallback = os.environ.get('SID_MANUAL_PATH')
+        if not fallback:
+            raise ValueError('The build has no SID manual artifact and no source-commit PDF was provided.')
+        manual = Path(fallback)
+        if manual.is_symlink() or not manual.is_file():
+            raise ValueError('The source build commit has no SID manual PDF.')
+        with manual.open('rb') as source:
+            if source.read(5) != b'%PDF-':
+                raise ValueError('The source build manual is not a PDF.')
+        files[MANUAL] = manual
+        print('Using the SID manual PDF from the selected build commit.')
     return files
 
 
