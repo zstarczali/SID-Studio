@@ -131,6 +131,43 @@ class PublishTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'uploading .*550 Permission denied'):
                 publish.upload(self.root)
 
+    def test_cleanup_removes_only_older_project_installers(self):
+        ftp = MagicMock()
+        prefix = 'VA SID Studio'
+        current = prefix + '_1.6.0_x64-setup.exe'
+        old = prefix + '_1.5.1_x64-setup.exe'
+        ftp.nlst.return_value = [old, current, prefix + '_1.7.0_x64-setup.exe', 'other_1.0.0_x64-setup.exe', 'manual.pdf', '/outside/' + old, 'readme.txt']
+        publish.remove_previous_installers(ftp, {current: None}, publish.PurePosixPath('/www/downloads/SIDS'))
+        ftp.delete.assert_called_once_with(old)
+
+    def test_size_failure_prevents_cleanup(self):
+        self.artifact('VA SID Studio_1.6.0_x64-setup.exe')
+        self.artifact(publish.MANUAL)
+        ftp = MagicMock()
+        ftp.size.return_value = 0
+        env = {'FTP_HOST': 'example.test', 'FTP_USERNAME': 'test', 'FTP_PASSWORD': 'test-only', 'FTP_DIRECTORY': '/www/downloads/SIDS/'}
+        with patch.dict(os.environ, env), patch.object(publish.ftplib, 'FTP_TLS') as cls:
+            cls.return_value.__enter__.return_value = ftp
+            with self.assertRaisesRegex(ValueError, 'size verification failed'):
+                publish.upload(self.root)
+        ftp.nlst.assert_not_called()
+        ftp.delete.assert_not_called()
+
+    def test_all_uploads_are_verified_before_cleanup(self):
+        current = 'VA SID Studio_1.6.0_x64-setup.exe'
+        self.artifact(current)
+        self.artifact(publish.MANUAL)
+        ftp = MagicMock()
+        ftp.size.return_value = 8
+        ftp.nlst.return_value = ['VA SID Studio_1.5.1_x64-setup.exe']
+        env = {'FTP_HOST': 'example.test', 'FTP_USERNAME': 'test', 'FTP_PASSWORD': 'test-only', 'FTP_DIRECTORY': '/www/downloads/SIDS/'}
+        with patch.dict(os.environ, env), patch.object(publish.ftplib, 'FTP_TLS') as cls:
+            cls.return_value.__enter__.return_value = ftp
+            publish.upload(self.root)
+        names = [call[0] for call in ftp.mock_calls]
+        self.assertGreater(names.index('delete'), max(i for i,n in enumerate(names) if n == 'size'))
+        ftp.delete.assert_called_once_with('VA SID Studio_1.5.1_x64-setup.exe')
+
 
 if __name__ == '__main__':
     unittest.main()
