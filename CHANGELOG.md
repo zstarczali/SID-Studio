@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1 - 2026-11-07
+
+- SID Player: automatically plays the remaining subtunes of a SID file in sequence before moving to the next playlist entry, including with shuffle enabled. A new toolbar toggle enables or disables this behavior and remembers the setting across restarts. Uses HVSC subtune lengths when available, otherwise three minutes per subtune.
+- Donation: the toolbar button appears only after ten minutes in each app session.
+
 ## 1.5.0 - 2026-11-06
 
 - Donation: a new toolbar button (the pink heart) opens the donation page on c64va.pro in the browser, where you can support the development with any amount through PayPal, as in Visual Assembler.

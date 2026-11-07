@@ -233,6 +233,7 @@ function setupSidPlayer() {
   on("websid-play-prev", "click", _sidPlayerPrev);
   on("websid-play-next", "click", _sidPlayerNext);
   on("websid-play-shuffle", "click", function() { _sidPlayerSetShuffle(!_sidShuffle); });
+  on("websid-play-subtunes", "click", function() { _sidPlayerSetSubtunes(!_sidPlaySubtunes); });
   on("websid-play-normalize", "click", function() { _playerSetNormalize(!_playerNormalize); });
   on("websid-play-song-prev", "click", function() { _sidPlayerSong(-1); });
   on("websid-play-song-next", "click", function() { _sidPlayerSong(1); });
@@ -3498,6 +3499,7 @@ let _sidPlaylistIndex = -1;
 // shuffle: the ids played in this round (in order), so Next never repeats a tune
 // until every entry has played and Previous steps back along the random order
 let _sidShuffle = false;
+let _sidPlaySubtunes = true;
 
 let _sidShuffleHistory = [];
 
@@ -3652,6 +3654,16 @@ function _sidPlayerSetShuffle(on) {
   _sidPlayerPersist();
 }
 
+function _sidPlayerSetSubtunes(on) {
+  _sidPlaySubtunes = !!on;
+  const btn = document.getElementById("websid-play-subtunes");
+  if (btn) {
+    btn.classList.toggle("websid-play-tool--active", _sidPlaySubtunes);
+    btn.setAttribute("aria-pressed", String(_sidPlaySubtunes));
+  }
+  _sidPlayerPersist();
+}
+
 function _sidPlayerRemove(id) {
   const index = _sidPlaylist.findIndex(function(item) { return item.id === id; });
   if (index < 0) return;
@@ -3695,8 +3707,14 @@ function _sidPlayerLengthMs() {
 // itself (Next renders the list while the status is still "playing") and
 // started every remaining tune of the playlist at once.
 function _sidPlayerAutoAdvance() {
-  if (_sidExtStatus === "playing" && !_sidExtStarting && _sidExtElapsedMs() >= (_sidPlayerTuneMs() || _SID_TUNE_LENGTH_MS)
-      && (_sidShuffle ? _sidPlaylist.length > 1 : _sidPlaylistIndex < _sidPlaylist.length - 1)) {
+  if (_sidExtStatus !== "playing" || _sidExtStarting || _sidExtElapsedMs() < (_sidPlayerTuneMs() || _SID_TUNE_LENGTH_MS)) return;
+  const item = _sidPlaylist[_sidPlaylistIndex];
+  // Finish the file's remaining subtunes before choosing another playlist entry,
+  // including when this is the only file or playlist shuffle is enabled.
+  if (_sidPlaySubtunes && item && item.song < item.info.songs) {
+    item.song++;
+    _sidPlayerPlayIndex(_sidPlaylistIndex);
+  } else if (_sidShuffle ? _sidPlaylist.length > 1 : _sidPlaylistIndex < _sidPlaylist.length - 1) {
     _sidPlayerNext();
   }
 }
@@ -3942,6 +3960,7 @@ function _sidPlayerPersist() {
       const state = storage ? _sidPlaylistToJson(storage) : {};
       state.open = open;
       state.shuffle = _sidShuffle;
+      state.playSubtunes = _sidPlaySubtunes;
     state.name = _sidPlaylistName || undefined;
       localStorage.setItem(_SID_PLAYER_STORE, JSON.stringify(state));
       return;
@@ -3962,6 +3981,7 @@ function _sidPlayerRestore() {
     _sidPlaylistIndex = _sidPlaylist.length ? Math.max(0, Math.min(list.current, _sidPlaylist.length - 1)) : -1;
   }
   if (typeof saved.name === "string") _sidPlaylistName = saved.name;
+  _sidPlayerSetSubtunes(saved.playSubtunes !== false);
   if (saved.shuffle) _sidPlayerSetShuffle(true);
   if (saved.open) _sidPlayerShow();
   else _sidPlayerRenderList();
@@ -9081,6 +9101,7 @@ function _sidApplyTranslations() {
   setAttr("#websid-play-prev", t("sidPlayerPrev"));
   setAttr("#websid-play-next", t("sidPlayerNext"));
   setAttr("#websid-play-shuffle", t("sidPlayerShuffle"));
+  setAttr("#websid-play-subtunes", t("sidPlayerSubtunes"));
   setAttr("#websid-play-rew", t("sidPlayerBack10"));
   setAttr("#websid-play-fwd", t("sidPlayerForward10"));
   setAttr("#websid-play-add", t("sidPlayerAdd"));
@@ -9641,6 +9662,11 @@ function _setupAbout() {
   document.getElementById("app-donate-btn")?.addEventListener("click", () => {
     window.electronAPI?.openExternal("https://www.c64va.pro/register/donate.php?lang=" + (currentLanguage === "hu" ? "hu" : "en"));
   });
+  // Keep the donation button out of the toolbar for the first ten minutes of each session.
+  setTimeout(() => {
+    const donateBtn = document.getElementById("app-donate-btn");
+    if (donateBtn) donateBtn.hidden = false;
+  }, 10 * 60 * 1000);
   document.getElementById("app-about-btn").addEventListener("click", async () => {
     const [version, vmaVersion] = await Promise.all([
       Promise.resolve(window.__TAURI__?.app?.getVersion?.()).catch(() => null),
