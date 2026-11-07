@@ -28,7 +28,17 @@ npm test        # JS engine tests; Rust: cargo test in src-tauri
 ```
 
 The `Build installers` GitHub Actions workflow builds the Windows and macOS (x64, ARM64) and the Linux (x64)
-installers; start it from the Actions tab or push a `v*` tag.
+installers and uploads the matching SID manual; start it from the Actions tab or push a `v*` tag.
+
+The manual **Publish** workflow takes a successful **Build installers** run ID (the number in its
+`/actions/runs/…` URL), extracts its `va-sid-studio-*` artifacts, and uploads the installers and
+`VA SID Studio Manual.pdf` directly to `/www/downloads/SIDS/` on `ftpx.forpsi.com`, using explicit
+FTPS with certificate verification. Configure the repository Actions secret `FTP_PASSWORD` for
+the `www.c64va.pro` FTP account before running it. The workflow replaces files with matching
+names and retains other files; it fails if installers or the matching build's manual are missing.
+Builds created before the manual artifact was added must be rebuilt before publishing.
+A manually dispatched workflow must exist on the default branch to appear in the Actions UI;
+select `development` in **Use workflow from** when publishing from that branch.
 
 The macOS app is not signed with an Apple Developer ID or notarized (ad-hoc signature only), so macOS quarantines
 the download and may refuse to open it. After copying it to Applications, run once:
