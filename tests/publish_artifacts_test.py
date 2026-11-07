@@ -58,7 +58,7 @@ class PublishTests(unittest.TestCase):
             self.assertTrue(cls.call_args.kwargs['context'].check_hostname)
             ftp.connect.assert_called_once_with('example.test', 21)
             ftp.prot_p.assert_called_once()
-            self.assertEqual([c.args[0] for c in ftp.cwd.call_args_list], ['/', 'www', 'downloads', 'SIDS'])
+            ftp.cwd.assert_called_once_with('/www/downloads/SIDS')
             self.assertEqual({c.args[0] for c in ftp.storbinary.call_args_list}, {'STOR studio.exe', 'STOR ' + publish.MANUAL})
             self.assertEqual(ftp.size.call_count, 2)
             ftp.delete.assert_not_called()
@@ -104,6 +104,32 @@ class PublishTests(unittest.TestCase):
         with patch.dict(os.environ, env), patch.object(publish.urllib.request, 'urlopen'), patch.object(publish.json, 'load', return_value=run):
             publish.validate_run()
         self.assertEqual(output.read_text(), 'head_sha=' + 'a' * 40 + '\n')
+
+    def test_login_failure_reports_stage_and_server_reply_without_password(self):
+        self.artifact('studio.exe')
+        self.artifact(publish.MANUAL)
+        ftp = MagicMock()
+        ftp.login.side_effect = publish.ftplib.error_perm('530 Login rejected test-password')
+        env = {'FTP_HOST': 'example.test', 'FTP_USERNAME': 'test', 'FTP_PASSWORD': 'test-password', 'FTP_DIRECTORY': '/www/downloads/SIDS/'}
+        with patch.dict(os.environ, env), patch.object(publish.ftplib, 'FTP_TLS') as cls:
+            cls.return_value.__enter__.return_value = ftp
+            with self.assertRaises(ValueError) as caught:
+                publish.upload(self.root)
+        self.assertIn('login', str(caught.exception))
+        self.assertIn('530 Login rejected', str(caught.exception))
+        self.assertNotIn('test-password', str(caught.exception))
+        ftp.storbinary.assert_not_called()
+
+    def test_upload_failure_reports_filename_and_server_reply(self):
+        self.artifact('studio.exe')
+        self.artifact(publish.MANUAL)
+        ftp = MagicMock()
+        ftp.storbinary.side_effect = publish.ftplib.error_perm('550 Permission denied')
+        env = {'FTP_HOST': 'example.test', 'FTP_USERNAME': 'test', 'FTP_PASSWORD': 'test-password', 'FTP_DIRECTORY': '/www/downloads/SIDS/'}
+        with patch.dict(os.environ, env), patch.object(publish.ftplib, 'FTP_TLS') as cls:
+            cls.return_value.__enter__.return_value = ftp
+            with self.assertRaisesRegex(ValueError, 'uploading .*550 Permission denied'):
+                publish.upload(self.root)
 
 
 if __name__ == '__main__':

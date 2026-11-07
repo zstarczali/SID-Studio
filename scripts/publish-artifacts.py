@@ -64,8 +64,17 @@ def collect_files(root):
             if source.read(5) != b'%PDF-':
                 raise ValueError('The source build manual is not a PDF.')
         files[MANUAL] = manual
-        print('Using the SID manual PDF from the selected build commit.')
+        print('Using the SID manual PDF from the selected build commit.', flush=True)
     return files
+
+
+def safe_error(error):
+    message = str(error)
+    for key in ('FTP_PASSWORD', 'GH_TOKEN'):
+        secret = os.environ.get(key)
+        if secret:
+            message = message.replace(secret, '[REDACTED]')
+    return ' '.join(message.splitlines())[:600]
 
 
 def upload(root):
@@ -76,28 +85,45 @@ def upload(root):
     directory = PurePosixPath(os.environ['FTP_DIRECTORY'])
     if not directory.is_absolute() or '..' in directory.parts:
         raise ValueError('FTP_DIRECTORY must be an absolute directory without parent traversal.')
-    # Validate the server certificate and encrypt both login and data connections.
-    with ftplib.FTP_TLS(context=ssl.create_default_context(), timeout=120) as ftp:
-        ftp.connect(os.environ['FTP_HOST'], 21)
-        ftp.login(os.environ['FTP_USERNAME'], password)
-        ftp.prot_p()
-        ftp.set_pasv(True)
-        ftp.cwd('/')
-        for part in directory.parts[1:]:
+    stage = 'opening FTPS connection'
+    try:
+        # Validate the server certificate and encrypt both login and data connections.
+        with ftplib.FTP_TLS(context=ssl.create_default_context(), timeout=120) as ftp:
+            stage = 'connecting to server'
+            ftp.connect(os.environ['FTP_HOST'], 21)
+            stage = 'login (check the FTP_PASSWORD Actions secret if rejected)'
+            ftp.login(os.environ['FTP_USERNAME'], password)
+            stage = 'enabling encrypted data transfers'
+            ftp.prot_p()
+            ftp.set_pasv(True)
+            stage = f'opening target directory {directory}'
             try:
-                ftp.cwd(part)
+                ftp.cwd(str(directory))
             except ftplib.error_perm as error:
                 if not str(error).startswith('550'):
                     raise
-                ftp.mkd(part)
-                ftp.cwd(part)
-        for name, path in files.items():
-            print(f'Uploading {name} ({path.stat().st_size} bytes)', flush=True)
-            with path.open('rb') as source:
-                ftp.storbinary('STOR ' + name, source, blocksize=256 * 1024)
-            ftp.voidcmd('TYPE I')
-            if ftp.size(name) != path.stat().st_size:
-                raise ValueError(f'Remote size verification failed: {name}')
+                ftp.cwd('/')
+                for part in directory.parts[1:]:
+                    stage = f'opening directory component {part}'
+                    try:
+                        ftp.cwd(part)
+                    except ftplib.error_perm as error:
+                        if not str(error).startswith('550'):
+                            raise
+                        stage = f'creating directory component {part}'
+                        ftp.mkd(part)
+                        ftp.cwd(part)
+            for name, path in files.items():
+                stage = f'uploading {name}'
+                print(f'Uploading {name} ({path.stat().st_size} bytes)', flush=True)
+                with path.open('rb') as source:
+                    ftp.storbinary('STOR ' + name, source, blocksize=256 * 1024)
+                stage = f'verifying uploaded size of {name}'
+                ftp.voidcmd('TYPE I')
+                if ftp.size(name) != path.stat().st_size:
+                    raise ValueError(f'Remote size verification failed: {name}')
+    except (ftplib.Error, OSError, EOFError) as error:
+        raise ValueError(f'FTP {stage}: {safe_error(error)}') from None
     print(f'Published {len(files)} files. Existing unrelated files were retained.')
 
 
