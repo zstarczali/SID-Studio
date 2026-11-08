@@ -546,6 +546,7 @@ The tune in the editor always stays whole.
 | **SID chip** | **MOS 8580** (default), **MOS 6581** | The chip of the early C64 is the 6581, and its filter sounds different. |
 | **LCD colour** | Green, Red | The tracker's display. |
 | **SID Player buffer** | 10, 15, 20 or 30 s | How far ahead a tune is rendered. A larger buffer stops crackling while the computer is busy. It takes effect from the next tune. |
+| **MOD Player buffer** | 2, 5, 10, 20 or 30 s | How far ahead a module (MOD, XM, S3M, IT…) is rendered. Raise it if a module crackles or stutters while the app is busy. A module that is playing fills up to the new size right away. |
 
 **About the two engines:** both are complete SID emulations written in Rust, with the 6581 and 8580, and they run on the same C64 core. They differ in the sound: reSID is a port of Dag Lem's well-known emulator, and VA SID Core is this project's own. reSID plays louder, because the output levels are not matched between them. **Import .sid** always uses VA SID Core for its recording, whichever engine you choose.
 

@@ -3216,6 +3216,14 @@ function _sidPlayerAheadSeconds(size) {
   return { 2048: 10, 4096: 15, 8192: 20, 16384: 30 }[size] || 0;
 }
 
+// MOD Player buffer (Settings): how many seconds of a module are rendered ahead.
+// Larger values keep a module playing through long UI work.
+function _modPlayerAheadSeconds() {
+  let n = 2;
+  try { n = parseInt(localStorage.getItem("c64va-mod-player-buffer"), 10) || 2; } catch (_) {}
+  return [2, 5, 10, 20, 30].includes(n) ? n : 2;
+}
+
 function _sidPlayerBufferSize() {
   let n = 2048;
   try { n = parseInt(localStorage.getItem("c64va-sid-player-buffer"), 10) || 2048; } catch (_) {}
@@ -5617,6 +5625,7 @@ const _MOD_EXTENSIONS = new Set(("mptm mod s3m xm it 667 669 amf ams c67 cba dbm
 
 const _MOD_CHUNK_SECONDS = 0.25;
 
+// start and seek fill only this much before returning; the timer tops up to the MOD Player buffer
 const _MOD_AHEAD_SECONDS = 2;
 
 let _modWorker = null;
@@ -5785,7 +5794,8 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
   if (ac.state === "suspended") ac.resume();
   const state = {
     kind: "mod", active: true, busy: false, paused: false, timer: null, queue: Promise.resolve(),
-    nextTime: ac.currentTime + 0.08, renderedMs: 0, seeking: false, ended: false, song
+    nextTime: ac.currentTime + 0.08, renderedMs: 0, seeking: false, ended: false, song,
+    ahead: _modPlayerAheadSeconds()
   };
   _sidExternalCore = state;
   let info;
@@ -5805,7 +5815,7 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
   const output = _playerNormOutput(ac);
   _playerNormApply(false);
   const frames = Math.round(ac.sampleRate * _MOD_CHUNK_SECONDS);
-  const pump = async function(force) {
+  const pump = async function(force, ahead = state.ahead) {
     if (!state.active || state.busy || state.ended || (state.seeking && !force)) return false;
     state.busy = true;
     try {
@@ -5819,7 +5829,7 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
         if (out.monitor) _channelMonitorQueue(state, state.nextTime, out.monitor);
         _sidPlayBuffer(out.pcm, state.nextTime, _sidExtSources, 2, output);
         state.nextTime += out.frames / ac.sampleRate;
-      } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < _MOD_AHEAD_SECONDS);
+      } while (state.active && !state.paused && (!state.seeking || force) && state.nextTime - ac.currentTime < ahead);
       return true;
     } catch (e) {
       if (state.active) {
@@ -5832,12 +5842,12 @@ async function _modPlayFileBytes(bytes, filename, song = 0) {
     }
   };
   state.pump = pump;
-  if (!(await pump())) return false;
+  if (!(await pump(false, Math.min(state.ahead, _MOD_AHEAD_SECONDS)))) return false;
   if (!state.active) return false;
   _sidPlayerShowTune(filename, _modEngineLabel());
   state.timer = setInterval(function() {
     if (!state.active || state.paused) return;
-    if (!state.ended && state.nextTime - ac.currentTime < _MOD_AHEAD_SECONDS * 0.6) pump();
+    if (!state.ended && state.nextTime - ac.currentTime < state.ahead * 0.6) pump();
     // the end of the last tune: nothing left to move on to
     if (state.ended && !state.busy && ac.currentTime >= state.nextTime
         && !(_sidShuffle ? _sidPlaylist.length > 1 : _sidPlaylistIndex < _sidPlaylist.length - 1)) _sidExtStop();
@@ -5860,7 +5870,7 @@ async function _modSeek(state, targetMs) {
     state.renderedMs = Math.max(0, Number(reached) * 1000 || targetMs);
     state.ended = false;
     state.nextTime = 0;
-    await state.pump(true);
+    await state.pump(true, Math.min(state.ahead, _MOD_AHEAD_SECONDS));
   } finally {
     state.seeking = false;
   }
@@ -9332,6 +9342,7 @@ function _sidApplyTranslations() {
   setText("#sid-preview-model-lbl", t("sidPreviewModel"));
   setText("#sid-lcd-color-lbl", t("sidLcdColor"));
   setText("#sid-player-buffer-lbl", t("sidPlayerBuffer"));
+  setText("#mod-player-buffer-lbl", t("modPlayerBuffer"));
   const sidLcdColor = document.getElementById("sid-lcd-color");
   if (sidLcdColor) {
     if (sidLcdColor.options[0]) sidLcdColor.options[0].textContent = t("sidLcdColorGreen");
@@ -9888,6 +9899,13 @@ function _setupAppSettings() {
   const buffer = document.getElementById("sid-player-buffer");
   buffer.value = String(_sidPlayerBufferSize());
   buffer.addEventListener("change", () => localStorage.setItem("c64va-sid-player-buffer", buffer.value));
+  const modBuffer = document.getElementById("mod-player-buffer");
+  modBuffer.value = String(_modPlayerAheadSeconds());
+  modBuffer.addEventListener("change", () => {
+    localStorage.setItem("c64va-mod-player-buffer", modBuffer.value);
+    // a module already playing fills up to the new size from its next refill
+    if (_sidExternalCore?.kind === "mod") _sidExternalCore.ahead = _modPlayerAheadSeconds();
+  });
   on("sid-lcd-color", "change", (e) => {
     localStorage.setItem("c64va-sid-lcd-color", e.target.value === "red" ? "red" : "green");
     _sidLcdApplyColor();
