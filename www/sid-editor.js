@@ -5508,8 +5508,9 @@ async function _vaSidPlayFileBytes(bytes, filename, song = 0) {
   const follow = function(at) {
     const gain = _playerNormGain({ loudness: _normLoudness(state.meter.blocks), peak: state.meter.peak });
     if (Math.abs(gain - state.normGain) < 0.005) return;
+    const from = state.normGain;
     state.normGain = gain;
-    if (_playerNormalize && _playerNormNode) _playerNormNode.gain.setTargetAtTime(gain, Math.max(at, ac.currentTime), 2);
+    if (_playerNormalize && _playerNormNode) _playerNormGlide(_playerNormNode.gain, from, gain, state.meter.peak, at, ac.currentTime);
   };
   const schedule = function(pcm, channels, monitor, frameRate) {
     const samples = pcm.length / channels;
@@ -5703,6 +5704,16 @@ function _playerNormApply(smooth) {
   param.cancelScheduledValues(now);
   if (smooth) { param.setValueAtTime(param.value, now); param.setTargetAtTime(value, now, 0.25); }
   else param.setValueAtTime(value, now);
+}
+
+// Moves the normalization gain to a new measurement of the playing SID tune, from the
+// audio that starts at `at`. Usually a slow glide (2 s); but a boost that the newly
+// measured peak no longer allows (a quiet intro raised, then a loud part) drops at once,
+// just before that audio plays, so the loud part does not clip.
+function _playerNormGlide(param, from, to, peak, at, now) {
+  const allowed = peak > 0 ? Math.max(1, 0.9 / peak) : Infinity;
+  if (to < from && from > allowed + 1e-6) param.setTargetAtTime(to, Math.max(now, at - 0.01), 0.003);
+  else param.setTargetAtTime(to, Math.max(at, now), 2);
 }
 
 function _playerSetNormalize(on) {
