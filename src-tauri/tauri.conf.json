@@ -27,6 +27,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["sidpl"],
+        "name": "SID Playlist",
+        "description": "VA SID Studio playlist",
+        "role": "Viewer",
+        "mimeType": "application/x-sidpl"
+      }
+    ],
     "resources": {
       "../docs/VA SID Studio Manual.pdf": "docs/VA SID Studio Manual.pdf"
     },

@@ -383,6 +383,9 @@ function setupSidPlayer() {
     _hvscRestore();
     _modlandRestore();
     setupSidVisualizer();
+    // a .sidpl the app was opened with (double click, "Open with"), now or while it runs
+    window.electronAPI?.onFilesOpened?.(_sidPlayerOpenLaunchFiles);
+    _sidPlayerOpenLaunchFiles();
   }, 0);
 }
 
@@ -4012,6 +4015,19 @@ function _sidPlayerLoadPlaylist(json, sourceName) {
   _sidPlaylistName = _sidPlaylistBaseName(sourceName);
   _sidPlayerAdd(list.entries, false, Math.min(list.current, list.entries.length - 1));
   return true;
+}
+
+// The playlist files handed over by the system (the app opened with a .sidpl file).
+async function _sidPlayerOpenLaunchFiles() {
+  if (!window.electronAPI?.takeOpenedFiles) return;
+  let files = [];
+  try { files = await window.electronAPI.takeOpenedFiles(); } catch (_) { return; }
+  (files || []).forEach(function(file) {
+    let json = null;
+    try { json = file.error ? null : JSON.parse(file.text); } catch (_) {}
+    if (json) _sidPlayerLoadPlaylist(json, file.name);
+    else showViceToast(tf("sidPlayerBadPlaylist", { name: file.name }), true);
+  });
 }
 
 async function _sidPlayerSavePlaylist() {

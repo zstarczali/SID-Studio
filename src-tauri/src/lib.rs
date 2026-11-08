@@ -459,15 +459,82 @@ async fn save_bin(app: AppHandle, payload: SaveBinPayload) -> serde_json::Value 
     }
 }
 
+// Playlist files the app was opened with (double click, "Open with", command line),
+// waiting for the page to take them.
+static OPENED_FILES: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+// The .sidpl paths among the command-line arguments (the first one is the program).
+fn opened_paths<I: IntoIterator<Item = String>>(args: I, cwd: &Path) -> Vec<PathBuf> {
+    args.into_iter()
+        .skip(1)
+        .map(PathBuf::from)
+        .filter(|p| {
+            p.extension()
+                .map(|e| e.to_string_lossy().eq_ignore_ascii_case("sidpl"))
+                .unwrap_or(false)
+        })
+        .map(|p| if p.is_absolute() { p } else { cwd.join(p) })
+        .collect()
+}
+
+fn queue_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
+    if paths.is_empty() {
+        return;
+    }
+    if let Ok(mut pending) = OPENED_FILES.lock() {
+        pending.extend(paths);
+    }
+    use tauri::Emitter;
+    let _ = app.emit("files-opened", ());
+}
+
+#[tauri::command]
+fn take_opened_files() -> Vec<serde_json::Value> {
+    let paths: Vec<PathBuf> = OPENED_FILES
+        .lock()
+        .map(|mut pending| pending.drain(..).collect())
+        .unwrap_or_default();
+    paths
+        .into_iter()
+        .map(|path| {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            match fs::read_to_string(&path) {
+                Ok(text) => serde_json::json!({ "name": name, "text": text }),
+                Err(e) => serde_json::json!({ "name": name, "error": e.to_string() }),
+            }
+        })
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // a second launch (double click on a .sidpl while the app runs) hands its files
+    // to the running window instead of opening another one
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            queue_opened_files(app, opened_paths(argv, Path::new(&cwd)));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 midi_permission::allow_without_prompt(&window);
+            }
+            let cwd = std::env::current_dir().unwrap_or_default();
+            if let Ok(mut pending) = OPENED_FILES.lock() {
+                pending.extend(opened_paths(std::env::args(), &cwd));
             }
             Ok(())
         })
@@ -496,9 +563,22 @@ pub fn run() {
             modland::modland_fetch,
             vma_build_raw,
             save_bin,
+            take_opened_files,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    app.run(|_app, _event| {
+        // macOS hands the opened files over as an event, not as arguments
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            let paths = urls
+                .into_iter()
+                .filter_map(|url| url.to_file_path().ok())
+                .map(|p| p.to_string_lossy().into_owned());
+            let cwd = std::env::current_dir().unwrap_or_default();
+            queue_opened_files(_app, opened_paths(std::iter::once(String::new()).chain(paths), &cwd));
+        }
+    });
 }
 
 #[cfg(test)]
@@ -706,5 +786,24 @@ mod sid_preview_tests {
         assert!(preview(vec![note_frame(0x33, 0), note_frame(0x1a, 0)]).is_err());
         assert!(preview(vec![note_frame(0x1a, 0), note_frame(0x33, 0)]).is_err());
         assert!(preview(vec![vec![0u8; 0x20]]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod opened_files_tests {
+    use super::*;
+
+    #[test]
+    fn only_sidpl_arguments_are_taken_and_made_absolute() {
+        let cwd = std::env::temp_dir();
+        let args = ["app.exe", "vegyes.SIDPL", "tune.sid", "--flag"].map(String::from);
+        let paths = opened_paths(args, &cwd);
+        assert_eq!(paths, vec![cwd.join("vegyes.SIDPL")]);
+    }
+
+    #[test]
+    fn the_program_itself_is_skipped() {
+        let paths = opened_paths(["x.sidpl".to_string()], Path::new("."));
+        assert!(paths.is_empty());
     }
 }
