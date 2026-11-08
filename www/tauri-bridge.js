@@ -31,5 +31,7 @@
     sidRegisterDump: (payload) => invoke("sid_register_dump", { payload }),
     onSidDumpProgress: (cb) => window.__TAURI__.event.listen("sid-dump-progress", e => cb(e.payload)),
     vmaBuildRaw: (source) => invoke("vma_build_raw", { source }),
+    takeOpenedFiles: () => invoke("take_opened_files"),
+    onFilesOpened: (cb) => window.__TAURI__.event.listen("files-opened", () => cb()),
   };
 })();
