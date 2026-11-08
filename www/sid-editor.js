@@ -3593,13 +3593,20 @@ function _sidPlayerPlayIndex(index) {
   _sidPlayerPersist();
   if (item.bytes || !item.modland) { _sidExtStartFile(item.bytes, item.name, item.song); return; }
   // a Modland module restored without its bytes: fetched (from the cache) first
-  if (!window.electronAPI?.modlandFetch) return;
+  if (!window.electronAPI?.modlandFetch || item.loading) return;
   _sidExtStop();
+  item.loading = true;
+  _sidPlayerRenderList();
+  _modlandRender();
   window.electronAPI.modlandFetch(item.modland).then(function(data) {
     item.bytes = new Uint8Array(data);
     if (_sidPlaylist[_sidPlaylistIndex] === item) _sidExtStartFile(item.bytes, item.name, item.song);
   }).catch(function(e) {
     showViceToast(tf("sidHvscFetchFailed", { name: item.name, error: String(e?.message || e) }), true);
+  }).finally(function() {
+    item.loading = false;
+    _sidPlayerRenderList();
+    _modlandRender();
   });
 }
 
@@ -3844,11 +3851,13 @@ function _sidPlayerRenderList() {
     list.textContent = "";
     _sidPlaylist.forEach(function(item, index) {
       const li = document.createElement("li");
-      li.className = "websid-play-item" + (index === _sidPlaylistIndex ? " websid-play-item--current" : "");
+      li.className = "websid-play-item" + (index === _sidPlaylistIndex ? " websid-play-item--current" : "") + (item.loading ? " websid-play-item--loading" : "");
       li.dataset.id = item.id;
+      if (item.loading) li.setAttribute("aria-busy", "true");
       const no = document.createElement("span");
       no.className = "websid-play-item-no";
-      no.textContent = String(index + 1);
+      if (item.loading) no.appendChild(_sidSpinner());
+      else no.textContent = String(index + 1);
       const name = document.createElement("span");
       name.className = "websid-play-item-name";
       name.textContent = item.info.title ? item.info.title + (item.info.author ? " — " + item.info.author : "") : item.name;
@@ -4303,6 +4312,14 @@ function _hvscStatusText() {
   return text;
 }
 
+// A small spinning ring: the row's tune is still downloading.
+function _sidSpinner() {
+  const el = document.createElement("span");
+  el.className = "websid-spinner";
+  el.setAttribute("aria-hidden", "true");
+  return el;
+}
+
 function _hvscRender() {
   const panel = document.getElementById("websid-hvsc");
   const btn = document.getElementById("websid-play-hvsc");
@@ -4350,9 +4367,11 @@ function _hvscRender() {
   const inList = new Set(_sidPlaylist.map(function(item) { return item.hvsc; }).filter(Boolean));
   _hvscResults.forEach(function(entry, index) {
     const li = document.createElement("li");
-    li.className = "websid-play-item websid-hvsc-item" + (inList.has(entry.p) ? " websid-hvsc-item--added" : "");
+    const loading = !!_hvscAdding?.has(entry.p);
+    li.className = "websid-play-item websid-hvsc-item" + (inList.has(entry.p) ? " websid-hvsc-item--added" : "") + (loading ? " websid-hvsc-item--loading" : "");
     li.dataset.index = String(index);
     li.dataset.path = entry.p;
+    if (loading) li.setAttribute("aria-busy", "true");
     const name = document.createElement("span");
     name.className = "websid-play-item-name";
     name.textContent = entry.t;
@@ -4365,8 +4384,9 @@ function _hvscRender() {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "websid-hvsc-item-btn websid-hvsc-item-add";
-    add.textContent = "+";
-    add.setAttribute("aria-label", t("sidHvscAdd"));
+    if (loading) add.appendChild(_sidSpinner());
+    else add.textContent = "+";
+    add.setAttribute("aria-label", t(loading ? "sidHvscLoading" : "sidHvscAdd"));
     const save = document.createElement("button");
     save.type = "button";
     save.className = "websid-hvsc-item-btn websid-hvsc-item-save";
@@ -4392,7 +4412,7 @@ async function _hvscFetchBytes(entry) {
 
 // Adds a tune and plays it if asked; a tune already in the playlist is only played.
 // a second click while the tune is still downloading adds nothing
-const _hvscAdding = new Set();
+var _hvscAdding = new Set();
 
 async function _hvscAddEntry(entry, play) {
   const existing = _sidPlaylist.findIndex(function(item) { return item.hvsc === entry.p; });
@@ -4402,8 +4422,9 @@ async function _hvscAddEntry(entry, play) {
   }
   if (_hvscAdding.has(entry.p)) return true;
   _hvscAdding.add(entry.p);
+  _hvscRender();
   let bytes;
-  try { bytes = await _hvscFetchBytes(entry); } finally { _hvscAdding.delete(entry.p); }
+  try { bytes = await _hvscFetchBytes(entry); } finally { _hvscAdding.delete(entry.p); _hvscRender(); }
   if (!bytes) return false;
   if (_sidPlaylist.some(function(item) { return item.hvsc === entry.p; })) return true;
   _sidPlayerAdd([{ name: _hvscFileName(entry), bytes, lengths: entry.l, hvsc: entry.p }], play);
@@ -4749,9 +4770,11 @@ function _modlandRender() {
   const inList = new Set(_sidPlaylist.map(function(item) { return item.modland; }).filter(Boolean));
   _modlandResults.forEach(function(entry, index) {
     const li = document.createElement("li");
-    li.className = "websid-play-item websid-hvsc-item" + (inList.has(entry.p) ? " websid-hvsc-item--added" : "");
+    const loading = !!_modlandAdding?.has(entry.p) || _sidPlaylist.some(function(item) { return item.loading && item.modland === entry.p; });
+    li.className = "websid-play-item websid-hvsc-item" + (inList.has(entry.p) ? " websid-hvsc-item--added" : "") + (loading ? " websid-hvsc-item--loading" : "");
     li.dataset.index = String(index);
     li.dataset.path = entry.p;
+    if (loading) li.setAttribute("aria-busy", "true");
     const name = document.createElement("span");
     name.className = "websid-play-item-name";
     name.textContent = entry.t;
@@ -4764,8 +4787,9 @@ function _modlandRender() {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "websid-hvsc-item-btn websid-hvsc-item-add";
-    add.textContent = "+";
-    add.setAttribute("aria-label", t("sidHvscAdd"));
+    if (loading) add.appendChild(_sidSpinner());
+    else add.textContent = "+";
+    add.setAttribute("aria-label", t(loading ? "sidHvscLoading" : "sidHvscAdd"));
     const save = document.createElement("button");
     save.type = "button";
     save.className = "websid-hvsc-item-btn websid-hvsc-item-save";
@@ -4791,7 +4815,7 @@ function _modlandItemEntry(entry, bytes) {
 
 // Adds a module and plays it if asked; a module already in the playlist is only played.
 // a second click while the module is still downloading adds nothing
-const _modlandAdding = new Set();
+var _modlandAdding = new Set();
 
 async function _modlandAddEntry(entry, play) {
   const existing = _sidPlaylist.findIndex(function(item) { return item.modland === entry.p; });
@@ -4801,8 +4825,9 @@ async function _modlandAddEntry(entry, play) {
   }
   if (_modlandAdding.has(entry.p)) return true;
   _modlandAdding.add(entry.p);
+  _modlandRender();
   let bytes;
-  try { bytes = await _modlandFetchBytes(entry); } finally { _modlandAdding.delete(entry.p); }
+  try { bytes = await _modlandFetchBytes(entry); } finally { _modlandAdding.delete(entry.p); _modlandRender(); }
   if (!bytes) return false;
   if (_sidPlaylist.some(function(item) { return item.modland === entry.p; })) return true;
   _sidPlayerAdd([_modlandItemEntry(entry, bytes)], play);
