@@ -109,7 +109,7 @@ The window is called **MOD Player** while a module plays (and, when nothing play
 
 ### Normalize volume
 
-The **Normalize volume** button (after **Channel curves** in the SID Player toolbar) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. The button can be switched while a tune plays. It is lit while it is on, and the app remembers it across restarts.
+The **Normalize volume** button (after **Channel curves** in the SID Player toolbar) plays every tune, SID or module, at about the same loudness: it raises or lowers each one towards a common level, by at most 12 dB, and never so far that its loudest part would clip. A module is measured over its whole length when it opens. A SID tune is measured on its first two seconds before it starts (so it starts a moment later), then the level follows the tune slowly as it plays. If a tune with a quiet start was raised and a louder part follows, the level drops at once, before that part sounds, so it does not distort. The button can be switched while a tune plays. It is lit while it is on, and the app remembers it across restarts.
 
 ---
 
