@@ -248,6 +248,8 @@ function setupSidPlayer() {
     fileInput.value = "";
   });
   on("websid-play-clear", "click", _sidPlayerClear);
+  on("websid-play-dedupe", "click", _sidPlayerRemoveDuplicates);
+  on("websid-play-keep-starred", "click", _sidPlayerKeepStarred);
   on("websid-play-hvsc", "click", function() { _hvscSetOpen(!_hvscOpen()); });
   on("websid-hvsc-random", "click", _hvscShowRandom);
   on("websid-hvsc-classics", "click", _hvscShowClassics);
@@ -332,9 +334,11 @@ function setupSidPlayer() {
     const li = e.target.closest(".websid-play-item");
     if (!li) return;
     if (e.target.closest(".websid-play-item-del")) { _sidPlayerRemove(li.dataset.id); return; }
-    if (e.target.closest(".websid-play-item-fav")) {
+    const star = e.target.closest(".websid-play-item-star");
+    if (star) {
       const item = _sidPlaylist.find(function(it) { return it.id === li.dataset.id; });
-      if (item) { item.fav = !item.fav; _sidPlayerRenderList(); _sidPlayerPersist(); }
+      const stars = Number(star.dataset.stars);
+      if (item) { item.fav = item.fav === stars ? 0 : stars; _sidPlayerRenderList(); _sidPlayerPersist(); }
       return;
     }
     _sidPlayerPlayIndex(_sidPlaylist.findIndex(function(item) { return item.id === li.dataset.id; }));
@@ -3532,7 +3536,7 @@ function _sidPsidInfo(bytes) {
 // (a Modland entry may have no bytes yet: they come from the cache when it plays)
 function _sidPlayerItem(entry, info) {
   const lengths = Array.isArray(entry.lengths) && entry.lengths.every(function(ms) { return Number.isFinite(ms) && ms >= 0; }) ? entry.lengths : null;
-  return { id: crypto.randomUUID(), name: entry.name, bytes: entry.bytes || null, info, song: _sidValidSong(entry.song, info), fav: !!entry.fav,
+  return { id: crypto.randomUUID(), name: entry.name, bytes: entry.bytes || null, info, song: _sidValidSong(entry.song, info), fav: _sidStars(entry.fav),
     lengths, hvsc: typeof entry.hvsc === "string" ? entry.hvsc : null, modland: typeof entry.modland === "string" ? entry.modland : null };
 }
 
@@ -3691,6 +3695,74 @@ function _sidPlayerClear() {
   _sidPlayerPersist();
 }
 
+const _SID_STARS_MAX = 5;
+
+// A playlist entry's stars, 0 to _SID_STARS_MAX (true: an older playlist's favorite).
+function _sidStars(value) {
+  if (value === true) return 1;
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.max(0, Math.min(_SID_STARS_MAX, n)) : 0;
+}
+
+// What makes two entries the same tune: the same HVSC / Modland path or the same bytes.
+function _sidPlayerKeys(item) {
+  const keys = [];
+  if (item.hvsc) keys.push("h:" + item.hvsc);
+  if (item.modland) keys.push("m:" + item.modland);
+  if (item.bytes) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < item.bytes.length; i++) h = Math.imul(h ^ item.bytes[i], 0x01000193);
+    keys.push("b:" + item.bytes.length + ":" + (h >>> 0).toString(16));
+  }
+  if (!keys.length) keys.push("n:" + item.name);
+  return keys;
+}
+
+// Keeps the first copy of every tune, with the most stars any of its copies had.
+function _sidPlayerRemoveDuplicates() {
+  const seen = new Map();
+  const current = _sidPlaylist[_sidPlaylistIndex];
+  let currentKept = current;
+  const kept = [];
+  _sidPlaylist.forEach(function(item) {
+    const keys = _sidPlayerKeys(item);
+    const first = keys.map(function(key) { return seen.get(key); }).find(Boolean);
+    keys.forEach(function(key) { seen.set(key, first || item); });
+    if (!first) { kept.push(item); return; }
+    first.fav = Math.max(first.fav, item.fav);
+    if (!first.bytes && item.bytes) first.bytes = item.bytes;
+    if (item === current) currentKept = first;
+  });
+  const removed = _sidPlaylist.length - kept.length;
+  if (!removed) { showViceToast(t("sidPlayerNoDuplicates")); return; }
+  _sidPlaylist = kept;
+  // the tune that plays goes on: its first copy becomes the current entry
+  _sidPlaylistIndex = currentKept ? kept.indexOf(currentKept) : -1;
+  _sidShuffleHistory = _sidShuffleHistory.filter(function(id) { return kept.some(function(item) { return item.id === id; }); });
+  _sidPlayerRenderList();
+  _sidPlayerPersist();
+  showViceToast(tf("sidPlayerDuplicatesRemoved", { count: removed }));
+}
+
+async function _sidPlayerKeepStarred() {
+  const starred = _sidPlaylist.filter(function(item) { return item.fav > 0; });
+  if (!starred.length || starred.length === _sidPlaylist.length) return;
+  const ok = await _showConfirm(tf("sidPlayerKeepStarredConfirm", { remove: _sidPlaylist.length - starred.length, keep: starred.length }));
+  if (!ok) return;
+  const current = _sidPlaylist[_sidPlaylistIndex];
+  const before = _sidPlaylist.slice(0, Math.max(0, _sidPlaylistIndex)).filter(function(item) { return item.fav > 0; }).length;
+  _sidPlaylist = starred;
+  if (current && starred.includes(current)) {
+    _sidPlaylistIndex = starred.indexOf(current);
+  } else {
+    if (current) { _sidExtStop(); _sidExtFile = null; }
+    _sidPlaylistIndex = Math.min(before, starred.length - 1);
+  }
+  _sidShuffleHistory = _sidShuffleHistory.filter(function(id) { return starred.some(function(item) { return item.id === id; }); });
+  _sidPlayerRenderList();
+  _sidPlayerPersist();
+}
+
 // The current subtune's length when HVSC knows it, otherwise 0.
 function _sidPlayerTuneMs() {
   const item = _sidPlaylist[_sidPlaylistIndex];
@@ -3743,6 +3815,11 @@ function _sidPlayerTickUi() {
   if (play) play.disabled = !hasPlaylist && !_sidExtFile;
   const clear = document.getElementById("websid-play-clear");
   if (clear) clear.disabled = !hasPlaylist;
+  const dedupe = document.getElementById("websid-play-dedupe");
+  if (dedupe) dedupe.disabled = _sidPlaylist.length < 2;
+  const starred = _sidPlaylist.filter(function(item) { return item.fav > 0; }).length;
+  const keepStarred = document.getElementById("websid-play-keep-starred");
+  if (keepStarred) keepStarred.disabled = !starred || starred === _sidPlaylist.length;
   const save = document.getElementById("websid-play-save-list");
   if (save) save.disabled = !hasPlaylist;
 }
@@ -3775,12 +3852,20 @@ function _sidPlayerRenderList() {
       const name = document.createElement("span");
       name.className = "websid-play-item-name";
       name.textContent = item.info.title ? item.info.title + (item.info.author ? " — " + item.info.author : "") : item.name;
-      const fav = document.createElement("button");
-      fav.type = "button";
-      fav.className = "websid-play-item-fav" + (item.fav ? " websid-play-item-fav--on" : "");
-      fav.textContent = item.fav ? "★" : "☆";
+      const fav = document.createElement("span");
+      fav.className = "websid-play-item-stars" + (item.fav ? " websid-play-item-stars--on" : "");
+      fav.setAttribute("role", "group");
       fav.setAttribute("aria-label", t("sidPlayerFavorite"));
-      fav.setAttribute("aria-pressed", String(!!item.fav));
+      for (let n = 1; n <= _SID_STARS_MAX; n++) {
+        const star = document.createElement("button");
+        star.type = "button";
+        star.className = "websid-play-item-star" + (n <= item.fav ? " websid-play-item-star--on" : "");
+        star.dataset.stars = String(n);
+        star.textContent = n <= item.fav ? "★" : "☆";
+        star.setAttribute("aria-label", tf("sidPlayerStars", { count: n }));
+        star.setAttribute("aria-pressed", String(n <= item.fav));
+        fav.appendChild(star);
+      }
       const del = document.createElement("button");
       del.type = "button";
       del.className = "websid-play-item-del";
@@ -3886,7 +3971,7 @@ function _sidPlaylistToJson(storage = "file") {
     items: _sidPlaylist.map(function(item) {
       const module = !!item.info?.module;
       const keep = !!item.bytes && (storage === "file" || !module || (storage === "local" && !item.modland));
-      return { name: item.name, song: item.song, fav: item.fav || undefined, hvsc: item.hvsc || undefined, modland: item.modland || undefined,
+      return { name: item.name, song: item.song, fav: item.fav ? true : undefined, stars: item.fav > 1 ? item.fav : undefined, hvsc: item.hvsc || undefined, modland: item.modland || undefined,
         title: item.modland ? item.info?.title : undefined, author: item.modland ? item.info?.author || undefined : undefined,
         songs: module && item.info.songs > 1 ? item.info.songs : undefined,
         lengths: item.lengths || undefined, data: keep ? _sidBytesToBase64(item.bytes) : undefined };
@@ -3903,7 +3988,7 @@ function _sidPlaylistFromJson(json) {
     const modland = typeof item.modland === "string" ? item.modland : undefined;
     if (typeof item.data !== "string" && !modland) return;
     try {
-      entries.push({ name: item.name, song: Number(item.song) || 0, fav: item.fav === true, hvsc: item.hvsc, lengths: item.lengths, modland,
+      entries.push({ name: item.name, song: Number(item.song) || 0, fav: item.stars !== undefined ? _sidStars(item.stars) : item.fav === true ? 1 : 0, hvsc: item.hvsc, lengths: item.lengths, modland,
         title: typeof item.title === "string" ? item.title : undefined, author: typeof item.author === "string" ? item.author : undefined,
         songs: Number(item.songs) || 0, bytes: typeof item.data === "string" ? _sidBase64ToBytes(item.data) : null });
     } catch (_) {}
@@ -4306,14 +4391,21 @@ async function _hvscFetchBytes(entry) {
 }
 
 // Adds a tune and plays it if asked; a tune already in the playlist is only played.
+// a second click while the tune is still downloading adds nothing
+const _hvscAdding = new Set();
+
 async function _hvscAddEntry(entry, play) {
   const existing = _sidPlaylist.findIndex(function(item) { return item.hvsc === entry.p; });
   if (existing >= 0) {
     if (play) _sidPlayerPlayIndex(existing);
     return true;
   }
-  const bytes = await _hvscFetchBytes(entry);
+  if (_hvscAdding.has(entry.p)) return true;
+  _hvscAdding.add(entry.p);
+  let bytes;
+  try { bytes = await _hvscFetchBytes(entry); } finally { _hvscAdding.delete(entry.p); }
   if (!bytes) return false;
+  if (_sidPlaylist.some(function(item) { return item.hvsc === entry.p; })) return true;
   _sidPlayerAdd([{ name: _hvscFileName(entry), bytes, lengths: entry.l, hvsc: entry.p }], play);
   _hvscRender();
   return true;
@@ -4335,7 +4427,9 @@ async function _hvscAddAll() {
   } finally {
     _hvscBusy = "";
   }
-  if (entries.length) _sidPlayerAdd(entries, false);
+  const inList = new Set(_sidPlaylist.map(function(item) { return item.hvsc; }));
+  const fresh = entries.filter(function(entry) { return !inList.has(entry.hvsc); });
+  if (fresh.length) _sidPlayerAdd(fresh, false);
   _hvscRender();
 }
 
@@ -4696,14 +4790,21 @@ function _modlandItemEntry(entry, bytes) {
 }
 
 // Adds a module and plays it if asked; a module already in the playlist is only played.
+// a second click while the module is still downloading adds nothing
+const _modlandAdding = new Set();
+
 async function _modlandAddEntry(entry, play) {
   const existing = _sidPlaylist.findIndex(function(item) { return item.modland === entry.p; });
   if (existing >= 0) {
     if (play) _sidPlayerPlayIndex(existing);
     return true;
   }
-  const bytes = await _modlandFetchBytes(entry);
+  if (_modlandAdding.has(entry.p)) return true;
+  _modlandAdding.add(entry.p);
+  let bytes;
+  try { bytes = await _modlandFetchBytes(entry); } finally { _modlandAdding.delete(entry.p); }
   if (!bytes) return false;
+  if (_sidPlaylist.some(function(item) { return item.modland === entry.p; })) return true;
   _sidPlayerAdd([_modlandItemEntry(entry, bytes)], play);
   _modlandRender();
   return true;
@@ -4725,7 +4826,9 @@ async function _modlandAddAll() {
   } finally {
     _modlandBusy = "";
   }
-  if (entries.length) _sidPlayerAdd(entries, false);
+  const inList = new Set(_sidPlaylist.map(function(item) { return item.modland; }));
+  const fresh = entries.filter(function(entry) { return !inList.has(entry.modland); });
+  if (fresh.length) _sidPlayerAdd(fresh, false);
   _modlandRender();
 }
 
@@ -9217,6 +9320,8 @@ function _sidApplyTranslations() {
   setAttr("#websid-play-fwd", t("sidPlayerForward10"));
   setAttr("#websid-play-add", t("sidPlayerAdd"));
   setAttr("#websid-play-clear", t("sidPlayerClear"));
+  setAttr("#websid-play-dedupe", t("sidPlayerDedupe"));
+  setAttr("#websid-play-keep-starred", t("sidPlayerKeepStarred"));
   setAttr("#websid-play-hvsc", t("sidHvsc"));
   setAttr("#websid-play-viz", t("sidVizOpen"));
   setAttr("#websid-play-normalize", t("sidPlayerNormalize"));
