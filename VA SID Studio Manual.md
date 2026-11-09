@@ -137,6 +137,8 @@ The **HVSC** button opens a search panel for the [High Voltage SID Collection](h
 
 ## 3b. Modland: Amiga and tracker modules
 
+![The Modland panel in the SID Player, searching by composer](docs/manual-images/modland.png)
+
 The **Modland** button (the floppy disk) opens a search panel for [Modland](https://ftp.modland.com/), the large archive of music modules. The panel lists only the formats the player can play: about 177,000 modules in 65 formats, among them Protracker, Soundtracker, OctaMED, Oktalyzer, Future Composer, Digibooster, Symphonie, Fasttracker 2, Screamtracker and Impulse Tracker. The HVSC and the Modland panel take turns: opening one closes the other.
 
 - **Search:** type a title, composer or format, for example `lizardking`, `jesper kyd` or `octamed`. Every word has to match. **Enter** plays the first result.
@@ -153,7 +155,7 @@ Not every Modland format plays: the players of many Amiga formats (TFMX, Jochen 
 
 ## 4. Spectrum analyzer
 
-![The Spectrum window](docs/manual-images/spectrum.png)
+![The Spectrum window in Mix view](docs/manual-images/spectrum.png)
 
 The **Spectrum analyzer** button opens a window with LED-style bars. It analyzes the sound that is playing, from the SID Player or the SID Editor. **Bands** sets 8, 16, 24 or 32 bands. The window can be moved and resized, and it closes and reopens together with the SID Player.
 
@@ -163,11 +165,15 @@ The **Mix / Channels** selector chooses the display:
 - **Channels** shows separate panels beside one another, wrapping into more rows when needed. For SID tunes, each voice has a spectrum estimated from its played registers and envelope. Two SID chips produce six voice panels, labelled by chip and voice. This estimate does not reproduce ring modulation, sync or filter resonance.
 - For MOD and other tracker modules, **Channels** shows a separate **VU** level meter for each module channel. These are level meters, not per-channel frequency spectra.
 
+![The Spectrum window in Channels view, with a two-SID tune](docs/manual-images/spectrum-channels.png)
+
 Drag the header to move the window. Drag the small lower-right grip to resize it; a focused grip also accepts arrow keys. The size, position and selected view are remembered. The SID Editor also has its own tracker-only display: see [Channel spectrum](#channel-spectrum). For a level curve and the note name of every channel, see [Channel curves](#4b-channel-curves).
 
 ---
 
 ## 4b. Channel curves
+
+![The Channel curves window with a two-SID tune](docs/manual-images/channel-curves.png)
 
 The **Channel curves** window shows, for every channel, a scrolling level curve and the note that is playing, in a large font. It works with SID tunes in the SID Player, with the tune playing in the SID Editor, and with MOD and other tracker modules.
 
@@ -573,6 +579,7 @@ The tune in the editor always stays whole.
 | **LCD colour** | Green, Red | The tracker's display. |
 | **SID Player buffer** | 10, 15, 20 or 30 s | How far ahead a tune is rendered. A larger buffer stops crackling while the computer is busy. It takes effect from the next tune. |
 | **MOD Player buffer** | 2, 5, 10, 20 or 30 s | How far ahead a module (MOD, XM, S3M, IT…) is rendered. Raise it if a module crackles or stutters while the app is busy. A module that is playing fills up to the new size right away. |
+| **Update server** | A web address, `https://www.c64va.pro/` by default | Where the app looks for new versions: the installers are looked up in `downloads/SIDS/` under it, as the line below the field shows. **Default** goes back to the built-in address. |
 
 **About the two engines:** both are complete SID emulations written in Rust, with the 6581 and 8580, and they run on the same C64 core. They differ in the sound: reSID is a port of Dag Lem's well-known emulator, and VA SID Core is this project's own. reSID plays louder, because the output levels are not matched between them. **Import .sid** always uses VA SID Core for its recording, whichever engine you choose.
 
