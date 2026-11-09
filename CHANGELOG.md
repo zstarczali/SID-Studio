@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.0 - 2026-11-09
+
+- Playlist ratings: a tune can get 1 to 5 stars instead of a single favourite mark. Stars are saved in the playlist file; a playlist saved earlier keeps its favourites as one star.
+- Remove duplicates: a new SID Player button removes tunes that are in the playlist more than once (the same HVSC or Modland path, or identical bytes). Keep only starred tunes removes the rest of the list after a question.
+- Opening playlists: a `.sidpl` file opens in the SID Player with a double click or Open with, also while the app is already running.
+- A spinner shows on a tune while it downloads from HVSC or Modland, and a second click on a tune that is still downloading no longer adds it twice.
+- MOD Player buffer: a new setting for how many seconds of a module are rendered ahead, like the SID Player buffer. Playback still starts and seeks quickly.
+- Normalize volume: when a quiet intro was raised and a louder part follows, the gain drops at once before that part plays, so it no longer clips.
+- A sample playlist of tracker modules, `samples/MOD Samples.sidpl`, in the repository.
+
 ## 1.6.0 - 2026-11-07
 
 - Channel curves: a shared toolbar window in the SID Player and SID Editor shows a scrolling level curve and a large note name for every channel. Works with SID tunes, tracker playback and MOD/tracker modules; a two-SID tune shows all six voices. SID levels are estimated from the played registers and envelope; module levels come from libopenmpt channel VU values, with note names from pattern rows.
