@@ -509,6 +509,30 @@ fn take_opened_files() -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// What is remembered of the main window: everything but the visibility.
+fn main_window_state_flags() -> tauri_plugin_window_state::StateFlags {
+    tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE
+}
+
+static MAIN_WINDOW_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Shows the main window (created hidden, `visible: false` in tauri.conf.json)
+/// at its saved size and place. Only the first call counts.
+fn show_main_window(app: &tauri::AppHandle) {
+    let Some(main) = app.get_webview_window("main") else { return };
+    if MAIN_WINDOW_SHOWN.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let _ = main.show();
+    // Windows moves a window created hidden when it is first shown: put it back
+    // where it was saved (size, position, maximized).
+    {
+        use tauri_plugin_window_state::WindowExt;
+        let _ = main.restore_state(main_window_state_flags());
+    }
+    let _ = main.set_focus();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -527,11 +551,30 @@ pub fn run() {
     let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Remembers the main window's size, position and maximized state, but not
+        // its visibility: the window starts hidden and is shown only once the page
+        // has loaded, so no empty default-size window flashes up before it.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(main_window_state_flags())
+                .build(),
+        )
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Finished {
+                show_main_window(webview.app_handle());
+            }
+        })
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 midi_permission::allow_without_prompt(&window);
             }
+            // in case the page never reports that it has loaded
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let main = handle.clone();
+                let _ = handle.run_on_main_thread(move || show_main_window(&main));
+            });
             let cwd = std::env::current_dir().unwrap_or_default();
             if let Ok(mut pending) = OPENED_FILES.lock() {
                 pending.extend(opened_paths(std::env::args(), &cwd));
