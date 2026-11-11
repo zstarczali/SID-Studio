@@ -1,13 +1,15 @@
-VA SID STUDIO 1.7.0 - INSTALLATION GUIDE
+VA SID STUDIO 1.7.1 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.7.0: 1-5 star ratings and duplicate removal in the SID Player
-playlist, opening .sidpl playlists by double click, a download spinner on
-tunes, and a MOD Player buffer setting. See CHANGELOG.md for release notes and
+New in 1.7.1: the main window no longer flashes up empty at start, and the
+SID Player toolbar has separators between its button groups. 1.7.0 brought
+1-5 star ratings and duplicate removal in the SID Player playlist, opening
+.sidpl playlists by double click, a download spinner on tunes, and a MOD
+Player buffer setting. See CHANGELOG.md for release notes and
 VA SID Studio Manual.md (or docs/VA SID Studio Manual.pdf) for full usage.
 Upgrading keeps your saved settings and edited tune in application storage.
 
