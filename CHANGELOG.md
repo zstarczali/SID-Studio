@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1 - 2026-11-11
+
+- Start: the main window appears only once the page has loaded, at its saved size and place, so no empty default-size window flashes up first.
+- SID Player toolbar: separators between the groups of buttons (analyzer and volume, collections, playlist files, playlist clean-up).
+- Manual: new screenshots (Modland, Channel curves, the Channels view of the Spectrum analyzer) and the Update server setting.
+
 ## 1.7.0 - 2026-11-09
 
 - Playlist ratings: a tune can get 1 to 5 stars instead of a single favourite mark. Stars are saved in the playlist file; a playlist saved earlier keeps its favourites as one star.
