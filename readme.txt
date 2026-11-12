@@ -1,11 +1,13 @@
-VA SID STUDIO 1.7.2 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.0 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.7.2: the Channels view of the Spectrum analyzer follows the Bands
+New in 1.8.0: the SID Editor's L (legato) effect and gate-off table steps,
+a closer .sid import, and VA SID Core 1.3 with an 8580 digi boost setting
+for loud $D418 samples. 1.7.2: the Channels view of the Spectrum analyzer follows the Bands
 setting for MOD and other tracker modules too. 1.7.1: the main window no
 longer flashes up empty at start, and the SID Player toolbar has separators
 between its button groups. 1.7.0 brought

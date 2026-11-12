@@ -60,6 +60,9 @@ struct SidPreviewPayload {
     /// NTSC timing: the NTSC clock and 60 frames a second (PAL: 50)
     #[serde(default)]
     ntsc: bool,
+    /// the 8580 digi boost (a DC level on EXT IN)
+    #[serde(default)]
+    digi_boost: bool,
     frames: Vec<Vec<u8>>,
 }
 
@@ -129,6 +132,7 @@ fn render_sid_preview_blocking(payload: SidPreviewPayload) -> Result<String, Str
         (0..chip_count)
             .map(|index| {
                 let mut sid = sid_chip::SidChip::new_with_clock(engine, sample_rate, model, clock);
+                sid.set_digi_boost(payload.digi_boost);
                 sid.settle_on_mixer(&payload.frames[0][index * 0x19 + 0x15..index * 0x19 + 0x19]);
                 (sid, [0; 3])
             })
@@ -223,6 +227,9 @@ struct SidFilePayload {
     /// 1-based subtune; 0 = the header's start song. Only used with file_bytes.
     #[serde(default)]
     song: u16,
+    /// the 8580 digi boost (a DC level on EXT IN), switchable while the tune plays
+    #[serde(default)]
+    digi_boost: bool,
 }
 
 // Each session has its own lock: the map is locked only to look a session up,
@@ -298,6 +305,7 @@ fn render_sid_file_blocking(payload: SidFilePayload) -> Result<serde_json::Value
     let mut player = session
         .lock()
         .map_err(|_| "SID file playback session failed.".to_string())?;
+    player.set_digi_boost(payload.digi_boost);
     // A tune has no seek of its own: seeking runs the skipped frames silently.
     let skip_samples = u64::from(payload.skip_ms.min(3_600_000)) * u64::from(sample_rate) / 1000;
     if skip_samples > 0 {
@@ -638,6 +646,7 @@ mod sid_file_session_tests {
             file_bytes: file.map(|bytes| bytes.to_vec()),
             skip_ms,
             song: 0,
+            digi_boost: false,
         }
     }
 
@@ -763,6 +772,7 @@ mod sid_preview_tests {
 
     fn preview(frames: Vec<Vec<u8>>) -> Result<Vec<i16>, String> {
         render_sid_preview_blocking(SidPreviewPayload {
+            digi_boost: false,
             engine: String::new(),
             sample_rate: 44_100,
             model: "8580".into(),
@@ -795,6 +805,7 @@ mod sid_preview_tests {
                 frame[0x17] = filter;
                 frame[0x18] = 0x1f;
                 let pcm = render_sid_preview_blocking(SidPreviewPayload {
+                    digi_boost: false,
                     engine: "resid".into(),
                     sample_rate: 44_100,
                     model: model.into(),

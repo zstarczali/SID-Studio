@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0 - 2026-11-12
+
+- SID Editor legato: the new **L** effect starts a note under the held gate, without retriggering the envelope and without a gate timer or hard restart before it. Type it as `D-4 L`; after a released gate it plays as a plain note. The exported 6502 player plays it the same way; the UltimateBasic export writes it as a plain note.
+- Wave / arpeggio table: a step can have **gate off**, which releases the gate from that step until the next note (drums, plucks inside one note). Saved in the `.bin` with the table.
+- .sid import: legato notes come in as **L** notes instead of retriggered ones (a legato note gives way where a row needs an `F` effect), a gate released inside a note becomes a gate-off table step so the tune's own ADSR stays, the silent intro is made of whole rows, and gate timers and hard restarts are read more exactly. Imported tunes sound closer to the originals.
+- VA SID Core 1.3: the 8580's voices have their small DC level, so `$D418` digis play quietly on the 8580, as on the real chip. The new **8580 digi boost** setting puts a DC level on EXT IN, as VICE does, and makes them loud, in both engines; it switches at once while a tune plays.
+
 ## 1.7.2 - 2026-11-12
 
 - Spectrum analyzer: the **Channels** view follows the **Bands** setting for MOD and other tracker modules too. Each module channel shows a spectrum estimated from its note and VU level (the harmonics of the note), and its panel is labelled with the note, instead of a single VU bar.

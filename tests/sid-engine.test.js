@@ -51,7 +51,7 @@ test("the engine's name follows the setting, and the backend gets it", async () 
   const payloads = [];
   const ctx = {
     Math, Array, Promise,
-    _sidPreviewEngine: "resid", _sidPreviewModel: "6581", _VA_SID_CORE_VERSION: "1.2",
+    _sidPreviewEngine: "resid", _sidPreviewModel: "6581", _VA_SID_CORE_VERSION: "1.2", _sidDigiBoost: false,
     window: { electronAPI: { renderSidPreview: (payload) => { payloads.push(payload); return Promise.resolve("x"); } } },
     _sidDecodePcm16: () => new Float32Array(4),
   };

@@ -1,4 +1,4 @@
-# VA SID Studio 1.7.2
+# VA SID Studio 1.8.0
 
 <p align="center">
   <img src="www/assets/logo-about.png" alt="VA SID Studio logo">
@@ -11,8 +11,8 @@ A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vani
 - Amiga and tracker modules in the SID Player: the Modland collection (about 177,000 playable modules), dropped `.mod` / `.xm` / `.s3m` / `.it` / `.med` … files, played with [libopenmpt](https://lib.openmpt.org/) (WebAssembly, `www/lib/libopenmpt`)
 - Channel curves: per-channel level history and large note names for SID and tracker modules, including six voices with two SID chips; shared by the player and editor, with saved visibility, size and position
 - Spectrum views: mixed audio, separate estimated SID voice spectra, or module channel spectra from each channel's note and VU level; draggable, resizable analyzer windows
-- SID Editor: 3-voice tracker (6 voices with a second SID at a selectable address), instruments, wave/arpeggio tables, effects, piano roll, per-voice spectrum, virtual keyboard, MIDI, recording
-- Playback and preview on reSID ([resid-rs](https://github.com/binaryfields/resid-rs), the default) or VA SID Core, both in Rust with a cycle-exact 6510 / CIA / VIC-II core, 6581 and 8580
+- SID Editor: 3-voice tracker (6 voices with a second SID at a selectable address), instruments, wave/arpeggio tables with gate-off steps, effects (vibrato, slides, note cut, speed, legato), piano roll, per-voice spectrum, virtual keyboard, MIDI, recording
+- Playback and preview on reSID ([resid-rs](https://github.com/binaryfields/resid-rs), the default) or VA SID Core, both in Rust with a cycle-exact 6510 / CIA / VIC-II core, 6581 and 8580 (with an optional 8580 digi boost for `$D418` samples)
 - Import: GoatTracker `.sng`, `.sid` (a 2SID tune as six voices); export: `.bin`, 6502 assembly, UltimateBasic, `.sid` (PSID)
 
 The app is an empty workspace: the SID Player, the SID Editor and the other windows float in it.
