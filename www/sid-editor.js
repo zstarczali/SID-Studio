@@ -5012,6 +5012,28 @@ function _sidVizReadLevels() {
   return levels;
 }
 
+/* Band levels 0..1 of a module channel. A module gives only the channel's note and VU level,
+   so its spectrum is modelled: the harmonics of the note (1/n, like a sawtooth) at that level.
+   C-5 is middle C; an unknown note (none yet, note off / cut) sounds at middle C. */
+function _sidVizModVoiceLevels(voice, bands) {
+  const out = new Array(bands).fill(0);
+  const level = Math.min(1, Math.max(0, voice?.level || 0));
+  if (level <= 0.001) return out;
+  const m = /^([A-G])([-#♯])(\d)/.exec(String(voice.note || ""));
+  const midi = m ? ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 })[m[1]] + (m[2] === "-" ? 0 : 1) + Number(m[3]) * 12 : 60;
+  const hz = 440 * Math.pow(2, (midi - 69) / 12);
+  const edges = _sidVizBandEdges(bands, 44100);
+  for (let n = 1; n * hz < edges[bands]; n++) {
+    const f = n * hz;
+    if (f < edges[0]) continue;
+    let band = 0;
+    while (band < bands - 1 && f >= edges[band + 1]) band++;
+    const a = level / n;
+    out[band] = Math.max(out[band], Math.min(1, 1 + 20 * Math.log10(a) / _SID_ANA_DB));
+  }
+  return out;
+}
+
 function _sidVizDrawChannels(canvas) {
   _sidAnaAttach();
   const ext = _sidExternalCore;
@@ -5035,8 +5057,8 @@ function _sidVizDrawChannels(canvas) {
     const chip = Math.floor(v / 3), bit = v % 3;
     const x = v % cols * cw + pad, y = Math.floor(v / cols) * ch + pad;
     ctx.fillStyle = "#aab5c5";
-    ctx.fillText(regs ? "S" + (chip + 1) + " V" + (bit + 1) : "CH " + (v + 1) + " · VU", x, y);
-    const levels = regs ? _sidAnaVoiceLevels(regs, chip * 25, bit, env?.[v]?.env || 0, _sidVizBands) : [Math.min(1, moduleVoices[v].level || 0)];
+    ctx.fillText(regs ? "S" + (chip + 1) + " V" + (bit + 1) : "CH " + (v + 1) + (moduleVoices[v].note && moduleVoices[v].note !== "—" ? " · " + moduleVoices[v].note : ""), x, y);
+    const levels = regs ? _sidAnaVoiceLevels(regs, chip * 25, bit, env?.[v]?.env || 0, _sidVizBands) : _sidVizModVoiceLevels(moduleVoices[v], _sidVizBands);
     const bw = (cw - pad * 2) / levels.length, bh = Math.max(1, ch - pad * 2 - 20 * dpr) / 10;
     for (let b = 0; b < levels.length; b++) for (let r = 0; r < 10; r++) {
       const on = Math.max(.06, Math.min(1, levels[b] * 10 - r));

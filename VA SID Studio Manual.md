@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.7.1**
+**Version 1.7.2**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -163,7 +163,7 @@ The **Mix / Channels** selector chooses the display:
 
 - **Mix** shows the frequency spectrum of the mixed audio output.
 - **Channels** shows separate panels beside one another, wrapping into more rows when needed. For SID tunes, each voice has a spectrum estimated from its played registers and envelope. Two SID chips produce six voice panels, labelled by chip and voice. This estimate does not reproduce ring modulation, sync or filter resonance.
-- For MOD and other tracker modules, **Channels** shows a separate **VU** level meter for each module channel. These are level meters, not per-channel frequency spectra.
+- For MOD and other tracker modules, **Channels** shows a panel for each module channel with the set number of **Bands**. A module gives only the channel's note and VU level, so the spectrum is estimated: the harmonics of the note at that level. The sample's real sound colour does not show.
 
 ![The Spectrum window in Channels view, with a two-SID tune](docs/manual-images/spectrum-channels.png)
 

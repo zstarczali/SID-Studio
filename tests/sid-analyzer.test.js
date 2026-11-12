@@ -23,8 +23,8 @@ function load() {
   vm.createContext(ctx);
   vm.runInContext(`${constLine("_SID_ATK")} ${constLine("_SID_DCR")} ${constLine("_SID_ANA_DB")}
     var _sidWaPlay = null, _sidAna = { env: [], rowFrame: -1, rowAt: 0, last: null };
-    ${["_sidVizBandEdges", "_sidAnaEnvStep", "_sidAnaFilterGain", "_sidAnaVoiceLevels", "_sidClockHz", "_sidIsNtsc", "_sidAnaAdvance", "_sidAnaRow"].map(fnSource).join("\n")}
-    this.api = { step: _sidAnaEnvStep, levels: _sidAnaVoiceLevels, edges: _sidVizBandEdges, advance: _sidAnaAdvance, row: _sidAnaRow,
+    ${["_sidVizBandEdges", "_sidAnaEnvStep", "_sidAnaFilterGain", "_sidAnaVoiceLevels", "_sidClockHz", "_sidIsNtsc", "_sidAnaAdvance", "_sidAnaRow", "_sidVizModVoiceLevels"].map(fnSource).join("\n")}
+    this.api = { mod: _sidVizModVoiceLevels, step: _sidAnaEnvStep, levels: _sidAnaVoiceLevels, edges: _sidVizBandEdges, advance: _sidAnaAdvance, row: _sidAnaRow,
       setPlay(w) { _sidWaPlay = w; }, state() { return _sidAna; } };`, ctx);
   ctx.api.now = 0;
   return ctx.api;
@@ -156,4 +156,22 @@ test("the engine records frames only while asked to", () => {
   assert.deepEqual(Array.from(e.snap, (s) => s.frame), [1, 2]);
   assert.notEqual(e.snap[0].regs, e.regs, "a copy of the registers");
   assert.equal(e.snap[0].trig.length, 3);
+});
+
+test("a module channel's spectrum follows the band count: its note's harmonics at its VU level", () => {
+  const api = load();
+  for (const bands of [8, 16, 24, 32]) {
+    const lv = api.mod({ note: "A-5", level: 0.8 }, bands);
+    assert.equal(lv.length, bands);
+    const edges = api.edges(bands, 44100);
+    const fund = edges.findIndex((e, i) => 440 >= e && 440 < edges[i + 1]);
+    assert.ok(lv[fund] > 0.9, `fundamental band ${fund} of ${bands}`);
+    assert.equal(Math.max(...lv), lv[fund]);
+    assert.ok(lv.slice(0, fund).every((v) => v === 0), "nothing below the note");
+  }
+  const low = api.mod({ note: "C-3", level: 0.8 }, 16), high = api.mod({ note: "C-7", level: 0.8 }, 16);
+  assert.ok(low.indexOf(Math.max(...low)) < high.indexOf(Math.max(...high)), "a higher note lights higher bands");
+  assert.ok(api.mod({ note: "C#5", level: 0.8 }, 16).some((v) => v > 0));
+  assert.ok(api.mod({ note: "—", level: 0.5 }, 16).some((v) => v > 0), "no note yet: middle C");
+  assert.ok(api.mod({ note: "A-5", level: 0 }, 16).every((v) => v === 0), "silent channel");
 });
