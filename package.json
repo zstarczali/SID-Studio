@@ -1,6 +1,6 @@
 {
   "name": "va-sid-studio",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Commodore 64 SID player and tracker, extracted from C64 Visual Assembler.",
   "author": "Zsolt Tarczali",
   "license": "GPL-3.0-or-later",

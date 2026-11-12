@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.2 - 2026-11-12
+
+- Spectrum analyzer: the **Channels** view follows the **Bands** setting for MOD and other tracker modules too. Each module channel shows a spectrum estimated from its note and VU level (the harmonics of the note), and its panel is labelled with the note, instead of a single VU bar.
+
 ## 1.7.1 - 2026-11-11
 
 - Start: the main window appears only once the page has loaded, at its saved size and place, so no empty default-size window flashes up first.
