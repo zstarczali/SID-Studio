@@ -1992,6 +1992,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
 .app-settings-card { min-width: 340px; }
 .app-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0; font-size: 0.82rem; }
 .app-settings-row .sid-select { width: 190px; flex: 0 0 190px; }
+.app-settings-row.me-check { color: inherit; }
 
 /* About, the same as the Visual Assembler's */
 .about-dialog {
