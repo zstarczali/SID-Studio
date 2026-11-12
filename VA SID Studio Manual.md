@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.7.2**
+**Version 1.8.0**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -272,7 +272,8 @@ After **Delay** frames (0–255), a triangle LFO turns every **Speed** frames (0
 A table of up to 32 steps runs during the note, and this is how arpeggios and drums are made. Each step has:
 
 - a **waveform**, or — to keep the current one;
-- a **note**: an offset in semitones, or **abs** for an absolute note.
+- a **note**: an offset in semitones, or **abs** for an absolute note;
+- **gate off**: from this step on the gate is released (the release phase) until the next note, for drums and plucked sounds within one note.
 
 **Speed** (1–15) is the number of frames per step. **Loop** jumps back to a chosen step at the end, or **No loop** stays on the last step. **+ Step** adds a step.
 
@@ -330,6 +331,7 @@ In a cell opened with **Enter**, type `note [instrument] [effect]`, then press *
 | `C-4 V24` | Note and effect, keeping the cell's instrument |
 | `F06` | Speed change on its own, with no note |
 | `C` | Note cut on its own |
+| `D-4 L` | A legato note, keeping the cell's instrument |
 | `===` or `OFF` | Note-off |
 | Nothing, or `...` | Clears the cell |
 
@@ -398,6 +400,7 @@ A cell can carry one effect next to its note. Effects act once per row, and they
 | `D` | Slide down | Subtracted from the frequency register on that row. |
 | `C` | Note cut | Releases the gate. The value is not used. A `C` with no note is shown as `===`. |
 | `F` | Speed | New frames-per-row value, effective immediately. |
+| `L` | Legato | The note starts under the held gate: the pitch changes, but the envelope is not retriggered, and no gate timer or hard restart runs before it. The value is not used. After a released gate (for example a `C`) it plays as a plain note. |
 
 Notes on using them:
 
@@ -520,9 +523,9 @@ MIDI depends on the web view of your system. Where it is not available, the app 
 
 Choose the subtune and the length in seconds (up to 900), and press **Import**. The tune runs silently, its SID registers are recorded frame by frame and turned into a song. This works from what the tune writes to the chip, so the result is an approximation that you can edit, not the composer's original data. When it finishes, a message lists what was approximated.
 
-- **Notes:** a note starts at a gate edge, and a retrigger within 2 frames counts as one note. A pitch change under a held gate that stays at least 5 frames becomes a new note. NTSC tunes are retuned to the PAL note table.
-- **Rows:** rows start exactly on the note starts. Rows one frame longer (funktempo, swing, tempo changes) are set with `F` effects.
-- **Instruments:** AD / SR, waveform, pulse width and PWM, the filter, and the waveform and pitch of every frame of the note, as a wave table of up to 32 steps. A regular sub-semitone wobble becomes the instrument's vibrato. Identical instruments are shared, up to 128.
+- **Notes:** a note starts at a gate edge, and a retrigger within 2 frames counts as one note. A pitch change under a held gate that stays at least 5 frames becomes a legato note (`L` effect), so the envelope goes on as in the original. Where a row needs an `F` effect, the legato note gives way and is retriggered. NTSC tunes are retuned to the PAL note table.
+- **Rows:** a silent intro is made of whole rows; rows start exactly on the note starts. Rows one frame longer (funktempo, swing, tempo changes) are set with `F` effects.
+- **Instruments:** AD / SR, waveform, pulse width and PWM, the filter, and the waveform and pitch of every frame of the note, as a wave table of up to 32 steps. A gate released inside a note becomes a **gate off** table step, so the tune's own ADSR stays; gate timer and hard restart come from the frames before the next note. A regular sub-semitone wobble becomes the instrument's vibrato. Identical instruments are shared, up to 128.
 - **Filter and pulse movement:** a filter sweep counts over the whole note, also after the waveform went silent, and it ends where another note restarts the filter. A filter table that falls fast counts by when it gets there, within the player's 127 per frame. A filter LFO bounces between its extremes. An instrument holds the pulse range of all its notes. Pulse and filter still restart at each routed note, so a sweep that runs freely across many notes is only approximated, and pitches that lie between semitones are rounded to the nearest one.
 - **Several SIDs:** a 2SID tune becomes six voices with its second address. A 3SID tune imports its first two SIDs, with a notice.
 - **Not supported:** RSID tunes that start as a BASIC program.
@@ -576,6 +579,7 @@ The tune in the editor always stays whole.
 | **Language** | English, Magyar, Deutsch, Español, Nederlands, Polski, Italiano | |
 | **SID engine** | **reSID (resid-rs)** (default), **VA SID Core** | See below. |
 | **SID chip** | **MOS 8580** (default), **MOS 6581** | The chip of the early C64 is the 6581, and its filter sounds different. |
+| **8580 digi boost** | Off (default), on | On the 8580, `$D418` digis (samples played through the volume register) sound very quietly, as on the real chip. The boost puts a DC level on the EXT IN input, as VICE does, so they become loud. Both engines use it; it has no effect on the 6581 and switches at once while a tune plays. |
 | **LCD colour** | Green, Red | The tracker's display. |
 | **SID Player buffer** | 10, 15, 20 or 30 s | How far ahead a tune is rendered. A larger buffer stops crackling while the computer is busy. It takes effect from the next tune. |
 | **MOD Player buffer** | 2, 5, 10, 20 or 30 s | How far ahead a module (MOD, XM, S3M, IT…) is rendered. Raise it if a module crackles or stutters while the app is busy. A module that is playing fills up to the new size right away. |
