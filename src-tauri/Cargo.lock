@@ -4725,9 +4725,10 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vma"
-version = "2.1.0"
-source = "git+https://github.com/zstarczali/VMA.git?branch=main#07b9b5df706cf017e2d43468293177aa56691afb"
+version = "2.3.0"
+source = "git+https://github.com/zstarczali/VMA.git?branch=main#9f835aaa715dfd28e17119907e04bbc9c93d7822"
 dependencies = [
+ "embed-resource",
  "regex",
  "serde_json",
 ]
