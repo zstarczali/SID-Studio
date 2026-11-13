@@ -1,6 +1,6 @@
 {
   "name": "va-sid-studio",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Commodore 64 SID player and tracker, extracted from C64 Visual Assembler.",
   "author": "Zsolt Tarczali",
   "license": "GPL-3.0-or-later",
@@ -10,6 +10,6 @@
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2.12.4"
   }
 }

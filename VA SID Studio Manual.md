@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.8.0**
+**Version 1.8.1**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -43,7 +43,7 @@ The app is an empty workspace with a toolbar of icon buttons. Everything else fl
 | **SID Player** | Opens or closes the [SID Player](#2-sid-player). |
 | **SID Editor** | Opens or closes the [SID Editor](#5-sid-editor-overview). |
 | **New tune** | Opens the SID Editor and starts an empty tune, after asking first. |
-| **Toggle theme** | Chooses one of 8 themes: Light, Dark, OLED, Black, Commodore 77, Commodore Starlight, Commodore Beige and Commodore 64. In December a ninth is offered, Christmas; after that the app goes back to the theme you had before. |
+| **Toggle theme** | Chooses one of 13 themes: Light, Dark, OLED, Black, Commodore 77, Commodore Starlight, Commodore Beige, Commodore 64, Ruby (deep red), Amethyst (cool purple), Phosphor (a green phosphor monitor), Retro 80s (synthwave neon with a sunset stripe and a neon grid) and Retro 8-bit (an 8-bit computer on a CRT: yellow keys, one monospace font, square corners, scanlines). In December a ninth is offered, Christmas; after that the app goes back to the theme you had before. |
 | **Settings** | Opens the [Settings](#16-settings). |
 | **Manual** | Opens this manual as a PDF, in your system's PDF viewer. |
 | **Check for update** | Looks for a new version, and downloads and installs it if you agree. The app restarts afterwards. It also looks at every start; **Skip this version** stops the question, the button stays lit. |
