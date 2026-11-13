@@ -4,6 +4,36 @@
   <img src="www/assets/logo-about.png" alt="VA SID Studio logo">
 </p>
 
+<!-- badges:start -->
+<p align="center">
+  <a href="https://www.c64va.pro/"><img src="https://img.shields.io/badge/website-c64va.pro-e05d44?style=flat" alt="Website"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/blob/main/package.json"><img src="https://img.shields.io/github/package-json/v/zstarczali/SID-Studio/main?label=version&color=4c1" alt="Version"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/actions/workflows/build-installers.yml"><img src="https://img.shields.io/github/actions/workflow/status/zstarczali/SID-Studio/build-installers.yml?branch=main&label=build" alt="Build"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue" alt="License: GPLv3"></a>
+  <a href="https://www.c64va.pro/register/donate.php"><img src="https://img.shields.io/badge/donate-PayPal-00457C?logo=paypal&logoColor=white" alt="Donate"></a>
+</p>
+<p align="center">
+  <a href="https://v2.tauri.app/"><img src="https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white" alt="Tauri 2"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-backend-B7410E?logo=rust&logoColor=white" alt="Rust"></a>
+  <a href="https://github.com/binaryfields/resid-rs"><img src="https://img.shields.io/badge/SID-reSID%20%7C%20VA%20SID%20Core-6c5eb5" alt="SID engines"></a>
+  <a href="https://www.c64va.pro/"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555" alt="Platforms"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/commits/main"><img src="https://img.shields.io/github/last-commit/zstarczali/SID-Studio/main" alt="Last commit"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/graphs/commit-activity"><img src="https://img.shields.io/github/commit-activity/m/zstarczali/SID-Studio" alt="Commit activity"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/issues"><img src="https://img.shields.io/github/issues/zstarczali/SID-Studio" alt="Issues"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/stargazers"><img src="https://img.shields.io/github/stars/zstarczali/SID-Studio?style=flat" alt="Stars"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/English-ddd" alt="English"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Magyar-ddd" alt="Magyar"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Deutsch-ddd" alt="Deutsch"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Espa%C3%B1ol-ddd" alt="Español"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Nederlands-ddd" alt="Nederlands"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Polski-ddd" alt="Polski"></a>
+  <a href="https://github.com/zstarczali/SID-Studio#readme"><img src="https://img.shields.io/badge/Italiano-ddd" alt="Italiano"></a>
+  <a href="https://www.c64va.pro/"><img src="https://img.shields.io/badge/sibling-C64%20Visual%20Assembler-8a2be2" alt="C64 Visual Assembler"></a>
+</p>
+<!-- badges:end -->
+
 A Commodore 64 SID player and tracker as a standalone desktop app (Tauri 2, vanilla JS, Rust), extracted from
 [C64 Visual Assembler](https://www.c64va.pro/).
 
