@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.1 - 2026-11-13
+
+- Five new themes: **Ruby** (deep red), **Amethyst** (cool purple), **Phosphor** (a green phosphor monitor), **Retro 80s** (synthwave: a violet night, neon pink and cyan, a sunset stripe on top and a neon grid rising from the bottom) and **Retro 8-bit** (an 8-bit home computer on a CRT: blue-violet panels, yellow keys, one monospace font, square corners, hard pixel shadows and scanlines). Pick them with **Toggle theme** on the toolbar.
+- Channel curves: the window opened from the SID Editor can be resized again with its corner grip (the grip had slipped out of the window).
+- Tauri 2.12: the app runs on Tauri 2.12 (wry 0.57, WebView2 bindings 0.39).
+
 ## 1.8.0 - 2026-11-12
 
 - SID Editor legato: the new **L** effect starts a note under the held gate, without retriggering the envelope and without a gate timer or hard restart before it. Type it as `D-4 L`; after a released gate it plays as a plain note. The exported 6502 player plays it the same way; the UltimateBasic export writes it as a plain note.
