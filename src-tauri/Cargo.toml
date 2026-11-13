@@ -35,7 +35,7 @@ tauri-plugin-single-instance = "2"
 # the SID emulation runs slower than real time unoptimised
 # the version wry uses: it moves together with Tauri
 [target.'cfg(windows)'.dependencies]
-webview2-com = "0.38"
+webview2-com = "0.39"
 
 [profile.dev]
 opt-level = 1
