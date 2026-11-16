@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.2 - 2026-11-16
+
+- HVSC and Modland results: clicking a tune plays it without adding it to the playlist, and when it ends the next result plays, in order (Next and Previous step through the results too). **+** still adds a tune to the playlist; playing a playlist entry goes back to the playlist.
+
 ## 1.8.1 - 2026-11-13
 
 - Five new themes: **Ruby** (deep red), **Amethyst** (cool purple), **Phosphor** (a green phosphor monitor), **Retro 80s** (synthwave: a violet night, neon pink and cyan, a sunset stripe on top and a neon grid rising from the bottom) and **Retro 8-bit** (an 8-bit home computer on a CRT: blue-violet panels, yellow keys, one monospace font, square corners, hard pixel shadows and scanlines). Pick them with **Toggle theme** on the toolbar.

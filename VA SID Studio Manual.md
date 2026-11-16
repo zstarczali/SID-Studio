@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.8.1**
+**Version 1.8.2**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -121,7 +121,7 @@ The **HVSC** button opens a search panel for the [High Voltage SID Collection](h
 
 - **Search:** type a title, composer or folder, for example `hubbard commando` or `games/s-z`. Every word has to match. **Enter** plays the first result.
 - **Composer:** the list next to the search field switches from **All** to **Composer**, which searches composer names only (`hubbard`, `rob hubbard`, `galway`) and lists the tunes by composer. The name comes from the tune's folder under `MUSICIANS`, so a composer is found by the folder's name, which may be a handle (`laxity`). About 4,600 tunes in `GAMES` and `DEMOS` have no composer folder: **All** finds them by title or folder.
-- **Results:** click a tune to play it. In its row, **+** adds it to the playlist and the download button saves the `.sid` file.
+- **Results:** click a tune to play it; it is not added to the playlist, and when it ends the next result plays (**Next** and **Previous** step through the results as well). In its row, **+** adds it to the playlist and the download button saves the `.sid` file.
 - **Random tunes** lists 25 random ones. **Add all results** adds up to 100 of the found tunes to the playlist.
 - **Top 50** (the star) lists 50 popular C64 tunes, most popular first: the 25 most remixed SID files according to [Remix64](https://remix64.com/)'s statistics of 20 years of C64 remixes (Last Ninja 2, Last Ninja, Commando, Great Giana Sisters, Delta…), then the originals most often in Remix64's C64 remix charts. HVSC itself has no ratings.
 - **Tune lengths:** HVSC knows the length of every subtune, so the position bar shows it and the playlist moves on at the right moment.
@@ -143,7 +143,7 @@ The **Modland** button (the floppy disk) opens a search panel for [Modland](http
 
 - **Search:** type a title, composer or format, for example `lizardking`, `jesper kyd` or `octamed`. Every word has to match. **Enter** plays the first result.
 - **Composer** and **Format** in the list next to the search field search only composer names or only the format (`protracker`, `future composer`, `fasttracker`). A composer is the module's folder in Modland, which may be a handle; a second name after `coop-` is shown with an `&`.
-- **Results:** click a module to play it. Its row shows the composer (and the game or album, if Modland files it so), the format and the file size. **+** adds it to the playlist and the download button saves the file.
+- **Results:** click a module to play it; it is not added to the playlist, and when it ends the next result plays. Its row shows the composer (and the game or album, if Modland files it so), the format and the file size. **+** adds it to the playlist and the download button saves the file.
 - **Random modules** lists 25 random ones. **Add all results** adds up to 50 of the found modules to the playlist.
 - **Top 50** (the star) lists 50 popular Amiga tunes, most popular first: the originals most often in [Remix64](https://remix64.com/)'s Amiga remix charts, in a format the player plays (Echoing, Crystal Hammer, Lost Patrol, Rings of Medusa, Amegas, Guitar Slinger, The Chaos Engine…). Chart tunes in TFMX or other formats libopenmpt cannot play (Turrican 2, Amberstar, A Prehistoric Tale…) are left out.
 

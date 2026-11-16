@@ -1,11 +1,13 @@
-VA SID STUDIO 1.8.1 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.2 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.8.1: five new themes (Ruby, Amethyst, Phosphor, Retro 80s,
+New in 1.8.2: a click on an HVSC or Modland result plays it without
+adding it to the playlist, and playback goes on through the results.
+1.8.1: five new themes (Ruby, Amethyst, Phosphor, Retro 80s,
 Retro 8-bit), the Channel curves window resizes inside the SID Editor
 again, and the app runs on Tauri 2.12. 1.8.0: the SID Editor's L (legato) effect and gate-off table steps,
 a closer .sid import, and VA SID Core 1.3 with an 8580 digi boost setting
