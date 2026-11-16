@@ -1,4 +1,4 @@
-# VA SID Studio 1.8.1
+# VA SID Studio 1.8.2
 
 <p align="center">
   <img src="www/assets/logo-about.png" alt="VA SID Studio logo">
