@@ -600,7 +600,8 @@ The tune in the editor always stays whole.
 
 ## 18. Credits and license
 
-VA SID Studio is free software under the GNU General Public License v3.0.
+Original VA SID Studio code is free software under the MIT License; see [LICENSE](LICENSE).
+Third-party and derived code retains its own license terms, including GPL for VICE/reSID; see [third-party licenses](THIRD_PARTY_NOTICES.md). The combined application is not solely MIT-licensed.
 
 - **Project:** [github.com/zstarczali/va-sid-editor](https://github.com/zstarczali/va-sid-editor), © 2026 Zsolt Tarczali
 - **Visual Assembler:** [www.c64va.pro](https://www.c64va.pro)

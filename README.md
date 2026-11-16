@@ -9,7 +9,7 @@
   <a href="https://www.c64va.pro/"><img src="https://img.shields.io/badge/website-c64va.pro-e05d44?style=flat" alt="Website"></a>
   <a href="https://github.com/zstarczali/SID-Studio/blob/main/package.json"><img src="https://img.shields.io/github/package-json/v/zstarczali/SID-Studio/main?label=version&color=4c1" alt="Version"></a>
   <a href="https://github.com/zstarczali/SID-Studio/actions/workflows/build-installers.yml"><img src="https://img.shields.io/github/actions/workflow/status/zstarczali/SID-Studio/build-installers.yml?branch=main&label=build" alt="Build"></a>
-  <a href="https://github.com/zstarczali/SID-Studio/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue" alt="License: GPLv3"></a>
+  <a href="https://github.com/zstarczali/SID-Studio/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <a href="https://www.c64va.pro/register/donate.php"><img src="https://img.shields.io/badge/donate-PayPal-00457C?logo=paypal&logoColor=white" alt="Donate"></a>
 </p>
 <p align="center">
@@ -82,4 +82,6 @@ xattr -cr "/Applications/VA SID Studio.app"
 
 `www/sid-editor.js` is the SID code of the Visual Assembler's `www/app.js`. The player is assembled by the
 [VMA](https://github.com/zstarczali/VMA) crate. The C64 emulation in `src-tauri/src/c64` and `mos6510.rs` is a
-port of VICE (GPLv2+). License: GPLv3, see `LICENSE`.
+port of VICE (GPLv2+). Original project code is MIT-licensed; see [LICENSE](LICENSE).
+VICE/reSID-derived code retains its GPL terms; see [third-party licenses](THIRD_PARTY_NOTICES.md).
+Distributing the combined application also requires compliance with those GPL terms.

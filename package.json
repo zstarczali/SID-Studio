@@ -3,7 +3,7 @@
   "version": "1.8.2",
   "description": "Commodore 64 SID player and tracker, extracted from C64 Visual Assembler.",
   "author": "Zsolt Tarczali",
-  "license": "GPL-3.0-or-later",
+  "license": "MIT",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

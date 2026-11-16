@@ -27,6 +27,7 @@
   },
   "bundle": {
     "active": true,
+    "license": "MIT",
     "targets": "all",
     "fileAssociations": [
       {
