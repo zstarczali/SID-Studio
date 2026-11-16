@@ -2,7 +2,7 @@
 name = "va-sid-studio"
 version = "1.8.2"
 edition = "2021"
-license = "GPL-3.0-or-later"
+license = "MIT"
 
 [lib]
 name = "va_sid_studio_lib"
