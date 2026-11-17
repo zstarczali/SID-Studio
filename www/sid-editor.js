@@ -3253,6 +3253,16 @@ function _sidPlayerBufferSize() {
   return _sidPlayerAheadSeconds(n) ? n : 2048;
 }
 
+// Fade-out at the end of a tune or module in seconds (0 = off), c64va-sid-player-fade.
+function _sidPlayerFadeSeconds() {
+  let n = 10;
+  try {
+    const v = localStorage.getItem("c64va-sid-player-fade");
+    if (v !== null) n = parseInt(v, 10);
+  } catch (_) {}
+  return [0, 5, 10, 15].includes(n) ? n : 10;
+}
+
 function _buildPsidBytes(prgBytes, initAddr, playAddr, name, released = "2026", secondSid = 0) {
   const HEADER_LEN = 0x7C;
   const out = new Uint8Array(HEADER_LEN + prgBytes.length);
@@ -3410,7 +3420,7 @@ function _sidExtSetStatus(status) {
   }
   _sidExtStatus = status;
   if (status === "playing" && !_sidExtTick) {
-    _sidExtTick = setInterval(function() { _sidExtRender(); _sidPlayerAutoAdvance(); }, 250);
+    _sidExtTick = setInterval(function() { _sidExtRender(); _sidExtFadeUpdate(); _sidSearchPrefetchTick(); _sidPlayerAutoAdvance(); }, 250);
   }
   if (status !== "playing" && _sidExtTick) { clearInterval(_sidExtTick); _sidExtTick = null; }
   _sidExtRender();
@@ -3462,6 +3472,8 @@ function _sidExtPause() {
 function _sidExtStop() {
   if (_sidExternalCore) _sidExternalCoreStop(true);
   _sidExtSetStatus("stopped");
+  // the next tune starts at full volume
+  _sidExtFadeUpdate(true);
 }
 
 // The backend runs the skipped part silently. The counter and the bar jump at once; while a seek is running only the
@@ -3739,13 +3751,40 @@ function _sidSearchNextEntry() {
 
 // Plays an HVSC / Modland result without adding it to the playlist; a second
 // click while it downloads does nothing, a newer click wins.
+// The next result is fetched during the last 30 s of a tune: a download at the
+// end let the ended tune run on into its loop, so its start was heard again.
+// { source, path, promise }; var: the tick may run before this point (TDZ).
+var _sidSearchPrefetch = null;
+function _sidSearchFetchBytes(source, entry) {
+  return (source === "modland" ? _modlandFetchBytes : _hvscFetchBytes)(entry);
+}
+function _sidSearchFetch(source, entry) {
+  const pre = _sidSearchPrefetch;
+  if (pre && pre.source === source && pre.path === entry.p) {
+    _sidSearchPrefetch = null;
+    return pre.promise;
+  }
+  return _sidSearchFetchBytes(source, entry);
+}
+function _sidSearchPrefetchTick() {
+  const s = _sidSearchPlay;
+  if (!s || _sidExtStatus !== "playing" || _sidExtStarting || _sidSearchLoading) return;
+  // the file's next subtune comes first
+  if (_sidPlaySubtunes && s.item && s.item.song < s.item.info.songs) return;
+  if (_sidExtFadeEnd() - _sidExtElapsedMs() > 30000) return;
+  const next = _sidSearchNextEntry();
+  const pre = _sidSearchPrefetch;
+  if (!next || (pre && pre.source === s.source && pre.path === next.p)) return;
+  _sidSearchPrefetch = { source: s.source, path: next.p, promise: _sidSearchFetchBytes(s.source, next) };
+}
+
 async function _sidSearchPlayEntry(source, entry) {
   if (_sidSearchLoading?.path === entry.p) return false;
   const seq = ++_sidSearchSeq;
   _sidSearchLoading = { source, path: entry.p };
   _sidSearchRender();
   let bytes = null;
-  try { bytes = await (source === "modland" ? _modlandFetchBytes : _hvscFetchBytes)(entry); }
+  try { bytes = await _sidSearchFetch(source, entry); }
   finally {
     if (seq === _sidSearchSeq) { _sidSearchLoading = null; _sidSearchRender(); }
   }
@@ -3930,8 +3969,12 @@ function _sidPlayerAutoAdvance() {
     else _sidPlayerPlayIndex(_sidPlaylistIndex);
   } else if (_sidSearchPlay) {
     if (_sidSearchNextEntry()) _sidSearchStep(1);
+    else if (_sidPlayerFadeSeconds() > 0) _sidExtStop();
   } else if (_sidShuffle ? _sidPlaylist.length > 1 : _sidPlaylistIndex < _sidPlaylist.length - 1) {
     _sidPlayerNext();
+  } else if (_sidPlayerFadeSeconds() > 0) {
+    // faded out with nothing after it: the end of the playlist
+    _sidExtStop();
   }
 }
 
@@ -4511,8 +4554,12 @@ function _hvscRender() {
   if (hvscField) hvscField.disabled = !ready;
   const list = document.getElementById("websid-hvsc-list");
   if (!list) return;
+  // emptying the list resets its scroll position: keep it (a new search starts at the top)
+  const scrollTop = list._results === _hvscResults ? list.scrollTop : 0;
+  list._results = _hvscResults;
   list.textContent = "";
   const inList = new Set(_sidPlaylist.map(function(item) { return item.hvsc; }).filter(Boolean));
+  let current = null;
   _hvscResults.forEach(function(entry, index) {
     const li = document.createElement("li");
     const loading = (_sidSearchLoading?.source === "hvsc" && _sidSearchLoading.path === entry.p) || !!_hvscAdding?.has(entry.p);
@@ -4543,8 +4590,12 @@ function _hvscRender() {
     save.setAttribute("aria-label", t("sidHvscSave"));
     li.append(name, who, len, add, save);
     list.appendChild(li);
-    if (playing && list._shown !== entry.p) { list._shown = entry.p; _sidPlayerRevealCurrent(list, li); }
+    if (playing) current = li;
   });
+  list.scrollTop = scrollTop;
+  const path = current ? current.dataset.path : null;
+  if (current && list._shown !== path) _sidPlayerRevealCurrent(list, current);
+  list._shown = path;
 }
 
 function _hvscFileName(entry) {
@@ -4916,8 +4967,12 @@ function _modlandRender() {
   if (field) field.disabled = !ready;
   const list = document.getElementById("websid-modland-list");
   if (!list) return;
+  // emptying the list resets its scroll position: keep it (a new search starts at the top)
+  const scrollTop = list._results === _modlandResults ? list.scrollTop : 0;
+  list._results = _modlandResults;
   list.textContent = "";
   const inList = new Set(_sidPlaylist.map(function(item) { return item.modland; }).filter(Boolean));
+  let current = null;
   _modlandResults.forEach(function(entry, index) {
     const li = document.createElement("li");
     const loading = (_sidSearchLoading?.source === "modland" && _sidSearchLoading.path === entry.p) || !!_modlandAdding?.has(entry.p) || _sidPlaylist.some(function(item) { return item.loading && item.modland === entry.p; });
@@ -4948,8 +5003,12 @@ function _modlandRender() {
     save.setAttribute("aria-label", t("sidModlandSave"));
     li.append(name, who, len, add, save);
     list.appendChild(li);
-    if (playing && list._shown !== entry.p) { list._shown = entry.p; _sidPlayerRevealCurrent(list, li); }
+    if (playing) current = li;
   });
+  list.scrollTop = scrollTop;
+  const path = current ? current.dataset.path : null;
+  if (current && list._shown !== path) _sidPlayerRevealCurrent(list, current);
+  list._shown = path;
 }
 
 async function _modlandFetchBytes(entry) {
@@ -5841,9 +5900,44 @@ function _normLoudness(blocks) {
 function _playerNormOutput(ac) {
   if (!_playerNormNode || _playerNormNode.context !== ac) {
     _playerNormNode = ac.createGain();
-    _playerNormNode.connect(_sidExtGain);
+    _playerNormNode.connect(_sidExtFadeOutput(ac));
   }
   return _playerNormNode;
+}
+
+// The end-of-tune fade stage, between normalization and the master gain.
+let _sidExtFadeNode = null;
+function _sidExtFadeOutput(ac) {
+  if (!_sidExtFadeNode || _sidExtFadeNode.context !== ac) {
+    _sidExtFadeNode = ac.createGain();
+    _sidExtFadeNode.connect(_sidExtGain);
+  }
+  return _sidExtFadeNode;
+}
+// Gain at `elapsed` ms of a tune ending at `end` ms with a `fadeMs` fade; a short
+// tune fades over its last quarter at most.
+function _sidExtFadeLevel(elapsed, end, fadeMs) {
+  if (!(fadeMs > 0) || !(end > 0)) return 1;
+  const len = Math.min(fadeMs, end / 4);
+  return Math.max(0, Math.min(1, (end - elapsed) / len));
+}
+function _sidExtFadeEnd() {
+  return _sidPlayerTuneMs() || _SID_TUNE_LENGTH_MS;
+}
+// Called from the playback tick (250 ms): ramps to the level of the next tick.
+function _sidExtFadeUpdate(reset) {
+  const node = _sidExtFadeNode;
+  if (!node) return;
+  const param = node.gain, now = node.context.currentTime;
+  param.cancelScheduledValues(now);
+  if (reset) { param.setValueAtTime(1, now); return; }
+  const playing = _sidExtStatus === "playing";
+  const elapsed = _sidExtElapsedMs() + 250, end = _sidExtFadeEnd();
+  let level = playing ? _sidExtFadeLevel(elapsed, end, _sidPlayerFadeSeconds() * 1000) : 1;
+  // past its end while the next result still downloads the tune would loop back to its start
+  if (playing && _sidSearchLoading && elapsed >= end) level = 0;
+  param.setValueAtTime(param.value, now);
+  param.linearRampToValueAtTime(level, now + 0.25);
 }
 
 function _playerNormApply(smooth) {
@@ -9564,6 +9658,8 @@ function _sidApplyTranslations() {
   setText("#sid-lcd-color-lbl", t("sidLcdColor"));
   setText("#sid-player-buffer-lbl", t("sidPlayerBuffer"));
   setText("#mod-player-buffer-lbl", t("modPlayerBuffer"));
+  setText("#sid-player-fade-lbl", t("sidPlayerFade"));
+  setText("#sid-player-fade-off", t("sidPlayerFadeOff"));
   const sidLcdColor = document.getElementById("sid-lcd-color");
   if (sidLcdColor) {
     if (sidLcdColor.options[0]) sidLcdColor.options[0].textContent = t("sidLcdColorGreen");
@@ -10132,6 +10228,9 @@ function _setupAppSettings() {
     // a module already playing fills up to the new size from its next refill
     if (_sidExternalCore?.kind === "mod") _sidExternalCore.ahead = _modPlayerAheadSeconds();
   });
+  const fade = document.getElementById("sid-player-fade");
+  fade.value = String(_sidPlayerFadeSeconds());
+  fade.addEventListener("change", () => { try { localStorage.setItem("c64va-sid-player-fade", fade.value); } catch (_) {} });
   on("sid-lcd-color", "change", (e) => {
     localStorage.setItem("c64va-sid-lcd-color", e.target.value === "red" ? "red" : "green");
     _sidLcdApplyColor();
