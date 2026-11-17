@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.3 - 2026-11-17
+
+- SID Player: **Fade out at the end** (Settings: Off / 5 / 10 / 15 s, 10 s by default). Many SID tunes and modules never end, they just loop; the player now fades a tune out over its last seconds (its HVSC or module length, otherwise 3 minutes), then moves on, and stops after the last tune of the playlist or the results. With the fade off, the last SID tune keeps playing as before.
+- HVSC and Modland results: the next result is downloaded during the last 30 seconds of a tune, so the switch has no gap. Before, the ended tune looped back to its start for a moment while the next one downloaded.
+- HVSC and Modland results: the result list keeps its scroll position while it updates; it no longer jumps to the top after a click.
+- License: the original VA SID Studio code is now MIT-licensed; VICE- and reSID-derived parts keep their GPL terms (see THIRD_PARTY_NOTICES.md).
+
 ## 1.8.2 - 2026-11-16
 
 - HVSC and Modland results: clicking a tune plays it without adding it to the playlist, and when it ends the next result plays, in order (Next and Previous step through the results too). **+** still adds a tune to the playlist; playing a playlist entry goes back to the playlist.

@@ -1,11 +1,14 @@
-VA SID STUDIO 1.8.2 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.3 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.8.2: a click on an HVSC or Modland result plays it without
+New in 1.8.3: tunes and modules fade out at the end of their length
+(Settings: Fade out at the end), the next HVSC / Modland result is
+downloaded ahead so the switch has no gap, and the original code is now
+MIT-licensed. 1.8.2: a click on an HVSC or Modland result plays it without
 adding it to the playlist, and playback goes on through the results.
 1.8.1: five new themes (Ruby, Amethyst, Phosphor, Retro 80s,
 Retro 8-bit), the Channel curves window resizes inside the SID Editor
