@@ -53,7 +53,7 @@ function setup() {
     Float32Array, Math, Array, Promise,
   };
   vm.createContext(ctx);
-  vm.runInContext(`
+  vm.runInContext(`var _sidExtFadeNode = null; 
     var _sidAudio = null, _sidMasterGain = null, _sidMasterVol = 0.6, _sidExtAudio = null, _sidExtGain = null, _sidVizVa = null, _sidVizExt = null;
     const _PLAYER_NORM_TARGET_DB = -18, _PLAYER_NORM_MAX_DB = 12;
     var _playerNormalize = false, _playerNormNode = null;
@@ -70,7 +70,7 @@ function setup() {
     function _sidExtStop() {}
     function _sidExtSetStatus(s) { _sidExtStatus = s; }
     ${["_sidEnsureAudio", "_sidPlayerAudio", "_sidPlayBuffer", "_sidDecodePcm16", "_sidExternalCoreStop", "_sidExtPlay", "_sidExtPause", "_sidApplyMasterVolume", "_sidVizTap", "_sidVizAnalysers",
-      "_normMeterNew", "_normMeterAdd", "_normLoudness", "_playerNormGain", "_playerNormOutput", "_playerNormApply"].map(fn).join("\n")}
+      "_normMeterNew", "_normMeterAdd", "_normLoudness", "_playerNormGain", "_playerNormOutput", "_sidExtFadeOutput", "_playerNormApply"].map(fn).join("\n")}
     async ${fn("_vaSidPlayFileBytes")}
     this.api = {
       start: () => _vaSidPlayFileBytes([1, 2, 3], "t.sid"),
@@ -125,7 +125,7 @@ test("the player's chunks go to the player's own gain, and a tune is on its own 
   await tick();
   assert.equal(contexts.length, 1, "no shared context is needed for a tune");
   // through the normalization stage, which feeds the player's gain
-  assert.equal(api.player().played[0].to, api.gain());
+  assert.equal(api.player().played[0].to.to, api.gain(), "through the end-of-tune fade stage");
 });
 
 test("Pause pressed again continues, as does Play", async () => {
