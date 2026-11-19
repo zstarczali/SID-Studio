@@ -1,6 +1,6 @@
 [package]
 name = "va-sid-studio"
-version = "1.8.3"
+version = "1.8.4"
 edition = "2021"
 license = "MIT"
 
@@ -12,7 +12,8 @@ crate-type = ["cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-resid-rs = { path = "vendor/resid-rs" }
+# the SID emulation shared with C64 Visual Assembler (VA SID Core, reSID, 6510 / CIA / VIC-II, .sid sessions)
+va-sid = { git = "https://github.com/zstarczali/VA-SID.git", rev = "58d7206d13e7c5ba4c5e6888110ec78223f93a13" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
@@ -24,7 +25,6 @@ urlencoding = "2"
 flate2 = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-base64 = "0.22"
 # assembles the exported player for playback and the .sid export
 vma = { git = "https://github.com/zstarczali/VMA.git", branch = "main" }
 

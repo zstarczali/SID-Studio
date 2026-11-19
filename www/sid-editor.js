@@ -9913,6 +9913,7 @@ function _sidApplyTranslations() {
   setText("#about-repo-label", t("aboutRepoLabel"));
   setText("#about-vma-repo-label", t("aboutVmaRepoLabel"));
   setText("#about-vma-version-label", t("aboutVmaVersionLabel"));
+  setText("#about-va-sid-version-label", t("aboutVaSidVersionLabel"));
   setText("#about-close", t("close"));
 }
 
@@ -10268,12 +10269,14 @@ function _setupAbout() {
     if (donateBtn) donateBtn.hidden = false;
   }, 10 * 60 * 1000);
   document.getElementById("app-about-btn").addEventListener("click", async () => {
-    const [version, vmaVersion] = await Promise.all([
+    const [version, vmaVersion, vaSidVersion] = await Promise.all([
       Promise.resolve(window.__TAURI__?.app?.getVersion?.()).catch(() => null),
-      Promise.resolve(window.electronAPI?.getVmaVersion?.()).catch(() => null)
+      Promise.resolve(window.electronAPI?.getVmaVersion?.()).catch(() => null),
+      Promise.resolve(window.electronAPI?.getVaSidVersion?.()).catch(() => null)
     ]);
     document.getElementById("about-version").textContent = version ? "v" + version : "v?";
     document.getElementById("about-vma-version-value").textContent = vmaVersion ? "v" + vmaVersion : "v?";
+    document.getElementById("about-va-sid-version-value").textContent = vaSidVersion ? "v" + vaSidVersion : "v?";
     dialog.showModal();
     // the first form control would be a link: Enter would open it instead of closing the dialog
     requestAnimationFrame(() => closeBtn.focus());
