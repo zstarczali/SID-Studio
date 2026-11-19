@@ -415,7 +415,8 @@ const translations = {
   "aboutModCreditLabel": "Modul-lejátszás: libopenmpt 0.8.10 (OpenMPT projekt). Weboldal:",
   "aboutRepoLabel": "VA SID Studio GitHub repository:",
   "aboutVmaRepoLabel": "VMA GitHub repository:",
-  "aboutVmaVersionLabel": "VMA fordító verzió:"
+  "aboutVmaVersionLabel": "VMA fordító verzió:",
+  "aboutVaSidVersionLabel": "VA-SID verzió:"
  },
  "en": {
   "sidVizView": "View",
@@ -833,7 +834,8 @@ const translations = {
   "aboutModCreditLabel": "Module playback: libopenmpt 0.8.10 by the OpenMPT project. Website:",
   "aboutRepoLabel": "VA SID Studio GitHub repository:",
   "aboutVmaRepoLabel": "VMA GitHub repository:",
-  "aboutVmaVersionLabel": "VMA compiler version:"
+  "aboutVmaVersionLabel": "VMA compiler version:",
+  "aboutVaSidVersionLabel": "VA-SID version:"
  },
  "es": {
   "themeLight": "Claro",
@@ -1246,7 +1248,8 @@ const translations = {
   "aboutModCreditLabel": "Reproducción de módulos: libopenmpt 0.8.10 del proyecto OpenMPT. Sitio web:",
   "aboutRepoLabel": "Repositorio de GitHub de VA SID Studio:",
   "aboutVmaRepoLabel": "Repositorio de GitHub de VMA:",
-  "aboutVmaVersionLabel": "Versión del compilador VMA:"
+  "aboutVmaVersionLabel": "Versión del compilador VMA:",
+  "aboutVaSidVersionLabel": "Versión de VA-SID:"
  },
  "de": {
   "themeLight": "Hell",
@@ -1659,7 +1662,8 @@ const translations = {
   "aboutModCreditLabel": "Modul-Wiedergabe: libopenmpt 0.8.10 vom OpenMPT-Projekt. Website:",
   "aboutRepoLabel": "GitHub-Repository von VA SID Studio:",
   "aboutVmaRepoLabel": "GitHub-Repository von VMA:",
-  "aboutVmaVersionLabel": "VMA-Compiler-Version:"
+  "aboutVmaVersionLabel": "VMA-Compiler-Version:",
+  "aboutVaSidVersionLabel": "VA-SID-Version:"
  },
  "nl": {
   "themeLight": "Licht",
@@ -2072,7 +2076,8 @@ const translations = {
   "aboutModCreditLabel": "Moduleweergave: libopenmpt 0.8.10 van het OpenMPT-project. Website:",
   "aboutRepoLabel": "GitHub-repository van VA SID Studio:",
   "aboutVmaRepoLabel": "GitHub-repository van VMA:",
-  "aboutVmaVersionLabel": "VMA-compilerversie:"
+  "aboutVmaVersionLabel": "VMA-compilerversie:",
+  "aboutVaSidVersionLabel": "VA-SID-versie:"
  },
  "pl": {
   "themeLight": "Jasny",
@@ -2485,7 +2490,8 @@ const translations = {
   "aboutModCreditLabel": "Odtwarzanie modułów: libopenmpt 0.8.10 projektu OpenMPT. Strona:",
   "aboutRepoLabel": "Repozytorium GitHub VA SID Studio:",
   "aboutVmaRepoLabel": "Repozytorium GitHub VMA:",
-  "aboutVmaVersionLabel": "Wersja kompilatora VMA:"
+  "aboutVmaVersionLabel": "Wersja kompilatora VMA:",
+  "aboutVaSidVersionLabel": "Wersja VA-SID:"
  },
  "it": {
   "themeLight": "Chiaro",
@@ -2898,6 +2904,7 @@ const translations = {
   "aboutModCreditLabel": "Riproduzione dei moduli: libopenmpt 0.8.10 del progetto OpenMPT. Sito web:",
   "aboutRepoLabel": "Repository GitHub di VA SID Studio:",
   "aboutVmaRepoLabel": "Repository GitHub di VMA:",
-  "aboutVmaVersionLabel": "Versione del compilatore VMA:"
+  "aboutVmaVersionLabel": "Versione del compilatore VMA:",
+  "aboutVaSidVersionLabel": "Versione di VA-SID:"
  }
 };

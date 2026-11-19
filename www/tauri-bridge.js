@@ -14,6 +14,7 @@
     onUpdateProgress: (cb) => window.__TAURI__.event.listen("update-download-progress", e => cb(e.payload)),
     openManual: () => invoke("open_manual"),
     getVmaVersion: () => invoke("get_vma_version"),
+    getVaSidVersion: () => invoke("get_va_sid_version"),
     hvscCatalog: (refresh) => invoke("hvsc_catalog", { refresh: !!refresh }),
     hvscStatus: () => invoke("hvsc_status"),
     hvscFetch: (path) => invoke("hvsc_fetch", { path }),

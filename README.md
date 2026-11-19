@@ -81,7 +81,7 @@ xattr -cr "/Applications/VA SID Studio.app"
 ```
 
 `www/sid-editor.js` is the SID code of the Visual Assembler's `www/app.js`. The player is assembled by the
-[VMA](https://github.com/zstarczali/VMA) crate. The C64 emulation in `src-tauri/src/c64` and `mos6510.rs` is a
-port of VICE (GPLv2+). Original project code is MIT-licensed; see [LICENSE](LICENSE).
+[VMA](https://github.com/zstarczali/VMA) crate. The SID emulation (VA SID Core, reSID, and the C64 in `c64` / `mos6510.rs`, a
+port of VICE, GPLv2+) is the [va-sid](https://github.com/zstarczali/VA-SID) crate, shared with Visual Assembler. Original project code is MIT-licensed; see [LICENSE](LICENSE).
 VICE/reSID-derived code retains its GPL terms; see [third-party licenses](THIRD_PARTY_NOTICES.md).
 Distributing the combined application also requires compliance with those GPL terms.
