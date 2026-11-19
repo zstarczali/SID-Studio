@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.4 - 2026-11-19
+
+- Shared SID emulation: VA SID Core, reSID and the cycle-exact 6510 / CIA / VIC-II now come from one library, [va-sid](https://github.com/zstarczali/VA-SID), which C64 Visual Assembler uses too, so both apps play every tune the same way. The sound does not change.
+- About shows the VA-SID version next to the VMA version.
+
 ## 1.8.3 - 2026-11-17
 
 - SID Player: **Fade out at the end** (Settings: Off / 5 / 10 / 15 s, 10 s by default). Many SID tunes and modules never end, they just loop; the player now fades a tune out over its last seconds (its HVSC or module length, otherwise 3 minutes), then moves on, and stops after the last tune of the playlist or the results. With the fade off, the last SID tune keeps playing as before.

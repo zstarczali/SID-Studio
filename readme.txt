@@ -1,11 +1,13 @@
-VA SID STUDIO 1.8.3 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.4 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.8.3: tunes and modules fade out at the end of their length
+New in 1.8.4: the SID emulation is the va-sid library shared with
+C64 Visual Assembler (the sound does not change), and About shows its
+version. 1.8.3: tunes and modules fade out at the end of their length
 (Settings: Fade out at the end), the next HVSC / Modland result is
 downloaded ahead so the switch has no gap, and the original code is now
 MIT-licensed. 1.8.2: a click on an HVSC or Modland result plays it without

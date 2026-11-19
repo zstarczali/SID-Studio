@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.8.3**
+**Version 1.8.4**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -47,7 +47,7 @@ The app is an empty workspace with a toolbar of icon buttons. Everything else fl
 | **Settings** | Opens the [Settings](#16-settings). |
 | **Manual** | Opens this manual as a PDF, in your system's PDF viewer. |
 | **Check for update** | Looks for a new version, and downloads and installs it if you agree. The app restarts afterwards. It also looks at every start; **Skip this version** stops the question, the button stays lit. |
-| **About** | Shows the version, the links and the license. |
+| **About** | Shows the version (and those of VMA and VA-SID), the links and the license. |
 | **Donation** | The pink heart appears after 10 minutes in each app session. It opens the donation page on c64va.pro in your browser, where you can support development through PayPal. The timer starts again whenever you launch the app. |
 | **Exit** | Saves the tune and the playlist, then closes the app. |
 
@@ -586,7 +586,7 @@ The tune in the editor always stays whole.
 | **MOD Player buffer** | 2, 5, 10, 20 or 30 s | How far ahead a module (MOD, XM, S3M, IT…) is rendered. Raise it if a module crackles or stutters while the app is busy. A module that is playing fills up to the new size right away. |
 | **Update server** | A web address, `https://www.c64va.pro/` by default | Where the app looks for new versions: the installers are looked up in `downloads/SIDS/` under it, as the line below the field shows. **Default** goes back to the built-in address. |
 
-**About the two engines:** both are complete SID emulations written in Rust, with the 6581 and 8580, and they run on the same C64 core. They differ in the sound: reSID is a port of Dag Lem's well-known emulator, and VA SID Core is this project's own. reSID plays louder, because the output levels are not matched between them. **Import .sid** always uses VA SID Core for its recording, whichever engine you choose.
+**About the two engines:** both are complete SID emulations written in Rust, with the 6581 and 8580, and they run on the same C64 core (all of it in the [va-sid](https://github.com/zstarczali/VA-SID) library, which C64 Visual Assembler uses too). They differ in the sound: reSID is a port of Dag Lem's well-known emulator, and VA SID Core is this project's own. reSID plays louder, because the output levels are not matched between them. **Import .sid** always uses VA SID Core for its recording, whichever engine you choose.
 
 ---
 
@@ -607,7 +607,7 @@ Third-party and derived code retains its own license terms, including GPL for VI
 - **Project:** [github.com/zstarczali/va-sid-editor](https://github.com/zstarczali/va-sid-editor), © 2026 Zsolt Tarczali
 - **Visual Assembler:** [www.c64va.pro](https://www.c64va.pro)
 - **VMA**, the assembler that builds the player: [github.com/zstarczali/VMA](https://github.com/zstarczali/VMA)
-- **SID emulation:** reSID by Dag Lem, Rust port [resid-rs](https://github.com/binaryfields/resid-rs) by Sebastian Jastrzebski (GPLv3)
+- **SID emulation:** the [va-sid](https://github.com/zstarczali/VA-SID) library, shared with C64 Visual Assembler (VA SID Core, the C64 core and reSID); its version is shown in About. reSID by Dag Lem, Rust port [resid-rs](https://github.com/binaryfields/resid-rs) by Sebastian Jastrzebski (GPLv3)
 - **C64 emulation:** a port of parts of [VICE](https://vice-emu.sourceforge.io/) (GPLv2+)
 - **Tunes:** the [High Voltage SID Collection](https://www.hvsc.c64.org/)
 - **Modules:** [Modland](https://ftp.modland.com/), played with [libopenmpt](https://lib.openmpt.org/) 0.8.10 by the OpenMPT project (BSD-3-Clause)
