@@ -568,11 +568,15 @@ function _sidInstNorm(ins) {
   o.pwmSpeed = cl(o.pwmSpeed, 0, 255); o.pwmMin = cl(o.pwmMin, 0, 4095); o.pwmMax = cl(o.pwmMax, 0, 4095);
   o.gateTimer = cl(o.gateTimer, 0, 15); o.firstWave = cl(o.firstWave, 0, 255);
   o.tableSpeed = cl(o.tableSpeed, 1, 15);
-  o.table = (Array.isArray(o.table) ? o.table : []).slice(0, 32).map(function(s) {
+  o.table = (Array.isArray(o.table) ? o.table : []).slice(0, 64).map(function(s) {
     const abs = !!(s && s.abs);
     const step = { w: cl(s && s.w, 0, 255), n: abs ? cl(s && s.n, 0, 95) : cl(s && s.n, -96, 95), abs: abs };
     // off: the gate is released from this step on (until the next note)
     if (s && s.off) step.off = true;
+    // optional: own length in frames, pulse width, filter (route = the chip's voice mask 0-7)
+    if (s && s.dur) step.dur = cl(s.dur, 1, 255);
+    if (s && s.pw != null) step.pw = cl(s.pw, 0, 4095);
+    if (s && s.flt) step.flt = { cut: cl(s.flt.cut, 0, 2047), res: cl(s.flt.res, 0, 15), mode: cl(s.flt.mode, 0, 15), route: cl(s.flt.route, 0, 7) };
     return step;
   });
   o.tableLoop = cl(o.tableLoop, -1, o.table.length - 1);
@@ -1476,13 +1480,71 @@ function _sidRenderTable() {
       _sidTableEdited();
       _sidRenderTable();
     });
-    row.append(idx, wave, note, absLbl, offLbl, del);
+    const more = document.createElement("button");
+    more.type = "button"; more.className = "sid-mini-btn sid-tstep-del"; more.textContent = "…";
+    more.setAttribute("aria-label", t("sidTableMore"));
+    more.classList.toggle("sid-tstep-more--set", !!(step.dur || step.pw != null || step.flt));
+    more.setAttribute("aria-expanded", String(_sidTableOpen.has(step)));
+    more.addEventListener("click", function(){
+      if (!_sidTableOpen.delete(step)) _sidTableOpen.add(step);
+      _sidRenderTable();
+    });
+    row.append(idx, wave, note, absLbl, offLbl, more, del);
     box.appendChild(row);
+    if (_sidTableOpen.has(step)) box.appendChild(_sidTableStepDetails(step));
   });
   const add = document.getElementById("sid-table-add");
-  if (add) add.disabled = table.length >= 32;
+  if (add) add.disabled = table.length >= 64;
   const presetSel = document.getElementById("sid-table-preset");
   if (presetSel) presetSel.value = inst._tablePreset || "";
+}
+
+// Steps whose details (length, pulse width, filter) are unfolded.
+const _sidTableOpen = new WeakSet();
+
+function _sidTableStepDetails(step) {
+  const box = document.createElement("div");
+  box.className = "sid-tstep-more";
+  const num = function(label, value, max, set) {
+    const lbl = document.createElement("label");
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.className = "sid-input"; inp.min = "0"; inp.max = String(max);
+    inp.value = value == null ? "" : String(value);
+    inp.addEventListener("input", function(){
+      const v = Number.parseInt(inp.value, 10);
+      set(Number.isFinite(v) ? Math.max(0, Math.min(max, v)) : null);
+      _sidTableEdited();
+    });
+    lbl.append(label, inp);
+    box.appendChild(lbl);
+  };
+  const check = function(label, value, set) {
+    const lbl = document.createElement("label");
+    lbl.className = "sid-check";
+    const inp = document.createElement("input");
+    inp.type = "checkbox"; inp.checked = !!value;
+    inp.addEventListener("change", function(){ set(inp.checked); _sidTableEdited(); });
+    const txt = document.createElement("span");
+    txt.textContent = label;
+    lbl.append(inp, txt);
+    box.appendChild(lbl);
+  };
+  // empty = the table's speed / the pulse width goes on
+  num(t("sidTableFrames"), step.dur, 255, function(v){ if (v) step.dur = v; else delete step.dur; });
+  num("PW", step.pw, 4095, function(v){ if (v == null) delete step.pw; else step.pw = v; });
+  check(t("sidTableFilter"), step.flt, function(on){
+    if (on) step.flt = { cut: 1024, res: 8, mode: 1, route: 1 }; else delete step.flt;
+    _sidRenderTable();
+  });
+  const f = step.flt;
+  if (f) {
+    num("Cut", f.cut, 2047, function(v){ f.cut = v || 0; });
+    num("Res", f.res, 15, function(v){ f.res = v || 0; });
+    const bit = function(key, b) { return function(on){ f[key] = on ? f[key] | b : f[key] & ~b; }; };
+    [["LP", 1], ["BP", 2], ["HP", 4]].forEach(function(m){ check(m[0], f.mode & m[1], bit("mode", m[1])); });
+    [1, 2, 4].forEach(function(b, k){ check(t("sidTableRoute") + " " + (k + 1), f.route & b, bit("route", b)); });
+  }
+  return box;
 }
 
 function _sidApplyTablePreset(key) {
@@ -6384,7 +6446,8 @@ function _sidTuneData(opts) {
   const speed = Math.max(1, Math.min(255, (opts.speed !== undefined ? opts.speed : _sidSpeed) | 0));
   const a = { ictl:[], iad:[], isr:[], ipwl:[], ipwh:[], icul:[], icuh:[], icel:[], iceh:[], icsp:[], ifl:[], ires:[],
     imode:[], ivol:[], ivdl:[], ivsp:[], ivdp:[], ipms:[], ipmnl:[], ipmnh:[], ipmxl:[], ipmxh:[], igt:[], ihr:[],
-    iffw:[], itst:[], itln:[], itlp:[], itsp:[], tw:[], tn:[], ta:[] };
+    iffw:[], itst:[], itln:[], itlp:[], itsp:[], tw:[], tn:[], ta:[],
+    td:[], tpl:[], tph:[], tcl:[], tch:[], tfr:[], tfm:[], ext: false };
   insts.forEach(function(o) {
     a.ictl.push(_sidInstCtrl(o)); a.iad.push((o.a << 4) | o.d); a.isr.push((o.s << 4) | o.r);
     a.ipwl.push(o.pw & 0xFF); a.ipwh.push(o.pw >> 8);
@@ -6398,16 +6461,24 @@ function _sidTuneData(opts) {
     a.ipms.push(o.pwmSpeed); a.ipmnl.push(pmin & 0xFF); a.ipmnh.push(pmin >> 8); a.ipmxl.push(pmax & 0xFF); a.ipmxh.push(pmax >> 8);
     a.igt.push(o.gateTimer); a.ihr.push(o.hr ? 1 : 0); a.iffw.push(o.firstWave);
     // identical step runs are stored once: the 255-step table space goes further
-    const bytes = o.table.map(function(s){ return [s.w & 0xFF, s.n & 0xFF, (s.abs ? 1 : 0) | (s.off ? 2 : 0)]; });
+    const bytes = o.table.map(function(s){
+      const p = s.pw != null ? s.pw : 0, q = s.flt || { cut: 0, res: 0, mode: 0, route: 0 };
+      return [s.w & 0xFF, s.n & 0xFF, (s.abs ? 1 : 0) | (s.off ? 2 : 0) | (s.pw != null ? 4 : 0) | (s.flt ? 8 : 0),
+        s.dur || 0, p & 0xFF, p >> 8, q.cut & 0xFF, q.cut >> 8, (q.res << 4) | q.route, q.mode << 4];
+    });
+    const cols = [a.tw, a.tn, a.ta, a.td, a.tpl, a.tph, a.tcl, a.tch, a.tfr, a.tfm];
     let at = -1;
     for (let k = 0; bytes.length && k + bytes.length <= a.tw.length && at < 0; k++) {
-      if (bytes.every(function(x, i){ return a.tw[k + i] === x[0] && a.tn[k + i] === x[1] && a.ta[k + i] === x[2]; })) at = k;
+      if (bytes.every(function(x, i){ return cols.every(function(col, c){ return col[k + i] === x[c]; }); })) at = k;
     }
     const steps = at >= 0 ? bytes : bytes.slice(0, Math.max(0, 255 - a.tw.length));
     a.itst.push(at >= 0 ? at : a.tw.length); a.itln.push(steps.length);
     a.itlp.push(o.tableLoop >= 0 && o.tableLoop < steps.length ? o.tableLoop : 0xFF);
     a.itsp.push(o.tableSpeed);
-    if (at < 0) steps.forEach(function(x){ a.tw.push(x[0]); a.tn.push(x[1]); a.ta.push(x[2]); });
+    if (at < 0) steps.forEach(function(x){
+      cols.forEach(function(col, c){ col.push(x[c]); });
+      if (x[3] || (x[2] & 12)) a.ext = true;
+    });
   });
   const chips = patterns[0] && patterns[0].length > 3 ? 2 : 1;
   const vol = Math.max(0, Math.min(15, (opts.vol !== undefined ? opts.vol : _sidVol()) | 0));
@@ -6443,13 +6514,22 @@ function _sidEngineNew(td) {
     v: Array.from({ length: voices }, voice), vols: [td.vol | 0, (td.vol2 !== undefined ? td.vol2 : td.vol) | 0], fs: [filter(), filter()] };
 }
 
-function _sidEngTab(e, s, k) {
+function _sidEngTab(e, v, k) {
+  const s = e.v[v];
   const w = e.a.tw[k] | 0;
   if (w) s.wav = w & 0xFE;
   s.nof = e.a.tn[k] | 0;
   const fl = e.a.ta[k] | 0;
   s.nab = fl & 1;
   if (fl & 2) s.gate = 0;
+  if (e.a.td[k]) s.tcnt = e.a.td[k];
+  if (fl & 4) s.pw = e.a.tpl[k] | (e.a.tph[k] << 8);
+  if (fl & 8) {
+    const f = e.fs[v / 3 | 0];
+    f.own = v; f.spd = 0;
+    f.cut = e.a.tcl[k] | (e.a.tch[k] << 8);
+    f.res = e.a.tfr[k] & 0xF0; f.route = e.a.tfr[k] & 7; f.mode = e.a.tfm[k];
+  }
 }
 
 function _sidEngNoteOn(e, v, n, i, leg) {
@@ -6470,7 +6550,6 @@ function _sidEngNoteOn(e, v, n, i, leg) {
   let m = e.ft.semi[n], mul = a.ivdp[i], acc = 0;
   while (mul) { if (mul & 1) acc = (acc + m) & 0xFFFF; m = (m << 1) & 0xFFFF; mul >>= 1; }
   s.vst = acc >> 5;
-  if (a.itln[i]) _sidEngTab(e, s, a.itst[i]);
   e.regs[base + 5] = a.iad[i];
   e.regs[base + 6] = a.isr[i];
   if (a.ivol[i] < 0x10) e.vols[chip] = a.ivol[i];
@@ -6483,6 +6562,8 @@ function _sidEngNoteOn(e, v, n, i, leg) {
   } else {
     f.route &= ~(1 << (v % 3)) & 0xFF;
   }
+  // last: the first step's pulse width and filter win over the instrument's
+  if (a.itln[i]) _sidEngTab(e, v, a.itst[i]);
 }
 
 function _sidEngRow(e) {
@@ -6549,8 +6630,10 @@ function _sidEngUpdate(e) {
         if (!s.tcnt) {
           s.tcnt = a.itsp[i];
           s.tpos = (s.tpos + 1) & 0xFF;
-          if (s.tpos >= a.itln[i]) s.tpos = a.itlp[i] === 0xFF ? a.itln[i] - 1 : a.itlp[i];
-          _sidEngTab(e, s, (s.tpos + a.itst[i]) & 0xFF);
+          // without a loop the last step holds; it is not applied again (its filter would keep taking over)
+          const end = s.tpos >= a.itln[i], hold = end && a.itlp[i] === 0xFF;
+          if (end) s.tpos = hold ? a.itln[i] - 1 : a.itlp[i];
+          if (!hold) _sidEngTab(e, v, (s.tpos + a.itst[i]) & 0xFF);
         }
       }
       ctl = s.wav | s.gate;
@@ -6822,7 +6905,13 @@ function _sidInstExtBytes(ins) {
   const out = [flags, o.cutEnd & 0xFF, o.cutEnd >> 8, o.cutSpeed, o.vibDelay, o.vibSpeed, o.vibDepth,
     o.pwmSpeed, o.pwmMin & 0xFF, o.pwmMin >> 8, o.pwmMax & 0xFF, o.pwmMax >> 8,
     o.gateTimer, o.firstWave, o.tableSpeed, o.tableLoop < 0 ? 0xFF : o.tableLoop, o.table.length];
-  o.table.forEach(function(s){ out.push(s.w, s.n & 0xFF, (s.abs ? 1 : 0) | (s.off ? 2 : 0)); });
+  // step flags: 1 = absolute, 2 = gate off, 4 = pulse width, 8 = filter, 16 = own length (their bytes follow)
+  o.table.forEach(function(s){
+    out.push(s.w, s.n & 0xFF, (s.abs ? 1 : 0) | (s.off ? 2 : 0) | (s.pw != null ? 4 : 0) | (s.flt ? 8 : 0) | (s.dur ? 16 : 0));
+    if (s.pw != null) out.push(s.pw & 0xFF, s.pw >> 8);
+    if (s.flt) out.push(s.flt.cut & 0xFF, s.flt.cut >> 8, (s.flt.res << 4) | s.flt.route, s.flt.mode);
+    if (s.dur) out.push(s.dur);
+  });
   const name = Array.from(new TextEncoder().encode(String(o.name || ""))).slice(0, 255);
   out.push(name.length);
   return out.concat(name);
@@ -6845,6 +6934,12 @@ function _sidReadInstExt(ins, src, p) {
     const w = src[p++] || 0, n = src[p++] || 0, fl = src[p++] || 0, abs = !!(fl & 1);
     const step = { w: w, n: abs ? n : (n > 127 ? n - 256 : n), abs: abs };
     if (fl & 2) step.off = true;
+    if (fl & 4) step.pw = (src[p++] || 0) | ((src[p++] || 0) << 8);
+    if (fl & 8) {
+      const cut = (src[p++] || 0) | ((src[p++] || 0) << 8), rr = src[p++] || 0;
+      step.flt = { cut: cut, res: rr >> 4, mode: src[p++] || 0, route: rr & 7 };
+    }
+    if (fl & 16) step.dur = src[p++] || 0;
     ins.table.push(step);
   }
   const nameLen = src[p++] || 0;
@@ -7294,6 +7389,26 @@ function _sidDumpImport(regs, meta) {
       return true;
     });
   });
+  // speech and other sound design: a note that takes the filter for itself and steps waveform, pulse width
+  // and filter by tables. One sweep per note cannot follow it: every frame's state becomes a table step.
+  voices.forEach(function(vc) {
+    const b = vc.b, at = vc.at, mask = 1 << vc.bit;
+    const pw = function(h) { return R(h, b + 2) | ((R(h, b + 3) & 15) << 8); };
+    vc.detail = new Set();
+    vc.ons.forEach(function(f, k) {
+      const next = Math.min(k + 1 < vc.ons.length ? vc.ons[k + 1] : frames, f + _SID_DUMP_WINDOW);
+      let filt = 0, other = 0, solo = false;
+      for (let g = f + 1; g < next; g++) {
+        const r1 = R(g, at + 0x17), r0 = R(g - 1, at + 0x17);
+        if ((r1 & 7) === mask) solo = true;
+        if (((r0 | r1) & mask) && (r1 !== r0 || ((R(g, at + 0x18) ^ R(g - 1, at + 0x18)) & 0x70))) filt++;
+        if (g === f + 1) continue;
+        if ((R(g, b + 4) ^ R(g - 1, b + 4)) & 0xF0) other++;
+        if (Math.abs(pw(g) - pw(g - 1)) >= 0x40) other++;
+      }
+      if (solo && filt >= 2 && other >= 2) vc.detail.add(f);
+    });
+  });
   // legato: under a held gate the pitch moves to a new semitone and stays there
   const LEGATO_HOLD = 5;
   voices.forEach(function(vc) {
@@ -7304,6 +7419,7 @@ function _sidDumpImport(regs, meta) {
     };
     vc.ons.forEach(function(f, k) {
       const next = k + 1 < vc.ons.length ? vc.ons[k + 1] : frames;
+      if (vc.detail.has(f)) return;
       let held = null;
       for (let g = f; g + LEGATO_HOLD <= next; g++) {
         const p = pitchAt(g);
@@ -7389,6 +7505,61 @@ function _sidDumpImport(regs, meta) {
     Object.keys(cnt).forEach(function(k){ if (best === null || cnt[k] > cnt[best] || (cnt[k] === cnt[best] && first[k] < first[best])) best = k; });
     return best === null ? null : +best;
   };
+  // the frame from which the ADSR prepares the next note: 00 00, or GoatTracker's 0F 00
+  const hardRestart = function(b, off, next) {
+    if (off < 1) return -1;
+    for (let g = off; g < next && g < frames; g++) {
+      const ad = R(g, b + 5);
+      if (R(g, b + 6) === 0 && (ad === 0 || (ad === 0x0F && R(off - 1, b + 6) !== 0))) return g;
+    }
+    return -1;
+  };
+  // the table of a detailed note: runs of equal frames, or null when it does not fit
+  const DETAIL_STEPS = 64, DETAIL_TOTAL = 192;
+  let detailTotal = 0;
+  const detailSeen = {};
+  const detailTable = function(vc, f, end, off) {
+    const b = vc.b, at = vc.at, mask = 1 << vc.bit;
+    const noteAt = function(g) { return noteOf(R(g, b) | (R(g, b + 1) << 8)); };
+    const pitched = [];
+    for (let g = f + 1; g < end; g++) { const w = R(g, b + 4); if ((w & 0x70) && !(w & 0x88)) pitched.push(noteAt(g)); }
+    const base = mode(pitched);
+    if (base == null) return null;
+    const steps = [];
+    let pw = null, flt = null, routed = false, last = "";
+    for (let g = f; g < end; g++) {
+      const w = R(g, b + 4) & 0xFE, r = R(g, at + 0x17);
+      const sounds = (w & 0xF0) && !(w & 8), noise = !!(w & 0x80);
+      // $01: no waveform at all (0 would keep the previous one)
+      const st = { w: sounds || (w & 8) ? w : 1, n: !sounds ? 0 : noise ? noteAt(g) : noteAt(g) - base, abs: !!(sounds && noise) };
+      if (w & 0x40) pw = R(g, b + 2) | ((R(g, b + 3) & 15) << 8);
+      // the filter counts while it has this voice, and once more when it lets go
+      const now = g > f && !!(r & mask);
+      if (now || routed) flt = { cut: (R(g, at + 0x15) & 7) | (R(g, at + 0x16) << 3), res: r >> 4, mode: R(g, at + 0x18) >> 4, route: r & 7 };
+      routed = now;
+      const key = JSON.stringify([st, pw, flt, off >= 0 && g >= off]);
+      if (key === last) { steps[steps.length - 1].dur++; continue; }
+      last = key;
+      steps.push(Object.assign(st, { off: g === off, dur: 1, pw: pw, flt: flt }));
+    }
+    const table = steps.map(function(st, k) {
+      const prev = steps[k - 1] || { pw: null, flt: null };
+      const out = { w: st.w, n: st.n, abs: st.abs };
+      if (st.off) out.off = true;
+      if (st.dur > 1 && k + 1 < steps.length) out.dur = st.dur;
+      if (st.pw !== prev.pw) out.pw = st.pw;
+      if (JSON.stringify(st.flt) !== JSON.stringify(prev.flt)) out.flt = st.flt;
+      return out;
+    });
+    if (table.length > DETAIL_STEPS) return null;
+    const key = JSON.stringify(table);
+    if (!detailSeen[key]) {
+      if (detailTotal + table.length > DETAIL_TOTAL) return null;
+      detailSeen[key] = true;
+      detailTotal += table.length;
+    }
+    return { base: base, table: table };
+  };
   const same = function(a, c) { return a.w === c.w && a.n === c.n && a.abs === c.abs && !a.off === !c.off; };
   voices.forEach(function(vc, v) {
     const b = vc.b, at = vc.at;
@@ -7418,6 +7589,23 @@ function _sidDumpImport(regs, meta) {
 
       const ins = _sidNewInst("SID");
       const ad = R(f, b + 5), sr = R(f, b + 6);
+      const detail = vc.detail.has(f) ? detailTable(vc, f, Math.min(next, f + _SID_DUMP_WINDOW, frames), off) : null;
+      if (detail) {
+        const main = detail.table.find(function(s){ return (s.w & 0x70) && !(s.w & 0x88); }).w;
+        const firstPw = detail.table.find(function(s){ return s.pw != null; });
+        ins.a = ad >> 4; ins.d = ad & 15; ins.s = sr >> 4; ins.r = sr & 15;
+        ins.tri = !!(main & 0x10); ins.saw = !!(main & 0x20); ins.pul = !!(main & 0x40); ins.noi = false;
+        ins.ring = !!(main & 4); ins.sync = !!(main & 2);
+        if (firstPw) ins.pw = firstPw.pw;
+        ins.vol = R(f, at + 0x18) & 15; ins.songVol = false;
+        ins.lp = ins.bp = ins.hp = ins.filt = false;
+        const zero = hardRestart(b, off, next);
+        if (zero >= 0 && next < frames && next - zero < speed && next - zero <= 15) { ins.gateTimer = next - zero; ins.hr = true; }
+        ins.table = detail.table; ins.tableLoop = -1; ins.tableSpeed = 1;
+        cols[v][row] = { note: detail.base, inst: 0, fx: null, fxval: 0 };
+        recs.push({ v: v, row: row, base: detail.base, w: main, ins: ins, raw: [], vibFrom: -1, detail: true });
+        return;
+      }
       ins.a = ad >> 4; ins.d = ad & 15; ins.s = sr >> 4; ins.r = sr & 15;
       ins.tri = !!(w & 0x10); ins.saw = !!(w & 0x20); ins.pul = !!(w & 0x40); ins.noi = !!(w & 0x80);
       ins.ring = !!(w & 0x04); ins.sync = !!(w & 0x02);
@@ -7485,8 +7673,7 @@ function _sidDumpImport(regs, meta) {
           ins.gateTimer = gap;
           // the player zeroes ADSR with the gate. A tune zeroing it a frame or two later (Hubbard) is
           // close enough; one keeping the release until the next note is no hard restart
-          let zero = -1;
-          for (let g = off; g < next && zero < 0; g++) { if (R(g, b + 5) === 0 && R(g, b + 6) === 0) zero = g; }
+          const zero = hardRestart(b, off, next);
           ins.hr = zero >= 0 && zero - off <= 2;
         } else {
           // released within the note: a table step releases the gate there (the ADSR stays the
@@ -7494,8 +7681,7 @@ function _sidDumpImport(regs, meta) {
           if (off - f < raw.length && off - f < _SID_DUMP_TABLE_STEPS) raw[off - f].off = true;
           else { ins.s = 0; ins.d = ins.r; }
           // the tune zeroes ADSR a few frames before the next note: silence from there on
-          let zero = -1;
-          for (let g = off; g < next && g < frames && zero < 0; g++) { if (R(g, b + 5) === 0 && R(g, b + 6) === 0) zero = g; }
+          const zero = hardRestart(b, off, next);
           if (zero >= 0 && next < frames && next - zero < speed && next - zero <= 15) { ins.gateTimer = next - zero; ins.hr = true; }
         }
       }
@@ -7589,7 +7775,7 @@ function _sidDumpImport(regs, meta) {
     return [r.ins.a, r.ins.d, r.ins.s, r.ins.r, r.w, r.ins.gateTimer].concat(r.raw.slice(0, 4).map(function(x){ return x.w; })).join(",");
   };
   const shapes = {};
-  recs.forEach(function(r){ (shapes[shapeOf(r)] = shapes[shapeOf(r)] || []).push(r); });
+  recs.forEach(function(r){ if (!r.detail) (shapes[shapeOf(r)] = shapes[shapeOf(r)] || []).push(r); });
   Object.keys(shapes).forEach(function(key) {
     const group = shapes[key];
     const steps = Math.max.apply(null, group.map(function(r){ return r.raw.length; }));
@@ -7618,7 +7804,7 @@ function _sidDumpImport(regs, meta) {
       return st;
     });
     const isPlain = function(st) { return st.w === w && st.n === 0 && !st.abs && !st.off; };
-    if (!steps.every(isPlain)) {
+    if (!r.detail && !steps.every(isPlain)) {
       // a table step can last several frames: one step per common run length
       let runGcd = 0;
       for (let k = 0, run = 1; k + 1 < len; k++) {
@@ -8355,12 +8541,6 @@ function _sidExportAsmPlayable() {
     "DEY",
     "BNE sid_sv_shr",
     "LDY sid_ci",
-    "LDA sid_itln,Y",
-    "BEQ sid_sv_notab",
-    "LDA sid_itst,Y",
-    "JSR sid_tab_apply",
-    "LDY sid_ci",
-    "sid_sv_notab:",
     "LDA sid_iad,Y",
     "STA sid_t0",
     "LDA sid_isr,Y",
@@ -8405,18 +8585,36 @@ function _sidExportAsmPlayable() {
       "LDA sid_vbit,X",
       "ORA sid_froute" + s,
       "STA sid_froute" + s,
-      "RTS",
+      "JMP sid_sv_tab",
       "sid_sv_nofilt" + s + ":",
       "LDA sid_vbit,X",
       "EOR #$FF",
       "AND sid_froute" + s,
       "STA sid_froute" + s,
-      "RTS");
+      "JMP sid_sv_tab");
   };
   if (nv > 3) L("CPX #$03", "BCC sid_sv_sid1", "JMP sid_sv_sid2", "sid_sv_sid1:");
   takeFilter("");
   if (nv > 3) { L("sid_sv_sid2:"); takeFilter("2"); }
-  L("",
+  const tabFilter = function(s) {
+    L("STX sid_fown" + s,
+      "LDA sid_tcl,Y", "STA sid_fcl" + s,
+      "LDA sid_tch,Y", "STA sid_fch" + s,
+      "LDA sid_tfr,Y", "AND #$F0", "STA sid_fres" + s,
+      "LDA sid_tfr,Y", "AND #$07", "STA sid_froute" + s,
+      "LDA sid_tfm,Y", "STA sid_fmode" + s,
+      "LDA #$00", "STA sid_fspd" + s,
+      "RTS");
+  };
+  L("; last in a note on: the first step's pulse width and filter win over the instrument's",
+    "sid_sv_tab:",
+    "LDA sid_itln,Y",
+    "BEQ sid_sv_notab",
+    "LDA sid_itst,Y",
+    "JMP sid_tab_apply",
+    "sid_sv_notab:",
+    "RTS",
+    "",
     "; A = table step, X = voice: waveform (0 = keep) and note offset",
     "sid_tab_apply:",
     "TAY",
@@ -8436,9 +8634,30 @@ function _sidExportAsmPlayable() {
     "BEQ sid_ta_gate",
     "LDA #$00",
     "STA sid_gate,X",
-    "sid_ta_gate:",
-    "RTS",
-    "");
+    "sid_ta_gate:");
+  if (a.ext) {
+    L("; own length (0 = the table's speed), pulse width (bit 2), filter (bit 3)",
+      "LDA sid_td,Y",
+      "BEQ sid_ta_dur",
+      "STA sid_tcnt,X",
+      "sid_ta_dur:",
+      "LDA sid_ta,Y",
+      "AND #$04",
+      "BEQ sid_ta_pw",
+      "LDA sid_tpl,Y",
+      "STA sid_pwl,X",
+      "LDA sid_tph,Y",
+      "STA sid_pwh,X",
+      "sid_ta_pw:",
+      "LDA sid_ta,Y",
+      "AND #$08",
+      "BEQ sid_ta_ret");
+    if (nv > 3) L("CPX #$03", "BCS sid_ta_sid2");
+    tabFilter("");
+    if (nv > 3) { L("sid_ta_sid2:"); tabFilter("2"); }
+    L("sid_ta_ret:");
+  }
+  L("RTS", "");
 
   // ---- gate timer / hard restart: gt frames before the next new note -----
   L("sid_hr_check:");
@@ -8508,6 +8727,8 @@ function _sidExportAsmPlayable() {
     "LDA sid_itln,Y",
     "SEC",
     "SBC #$01",
+    "STA sid_tpos,X",          // no loop: the last step holds
+    "JMP sid_up_wgate",
     "sid_up_tloop:",
     "STA sid_tpos,X",
     "sid_up_tstep:",
@@ -8812,6 +9033,11 @@ function _sidExportAsmPlayable() {
   chunk("sid_tw", a.tw);
   chunk("sid_tn", a.tn);
   chunk("sid_ta", a.ta);
+  if (a.ext) {
+    L("; ... step length, pulse width, cutoff, resonance + routing, filter mode");
+    [["sid_td", "td"], ["sid_tpl", "tpl"], ["sid_tph", "tph"], ["sid_tcl", "tcl"], ["sid_tch", "tch"], ["sid_tfr", "tfr"], ["sid_tfm", "tfm"]]
+      .forEach(function(p){ chunk(p[0], a[p[1]]); });
+  }
   L("");
 
   // notes + instrument + effect columns per voice, all patterns concatenated
@@ -8844,7 +9070,7 @@ function _sidExportAsmPlayable() {
     const m = /^\s*\.byte\s+(.*)$/.exec(l);
     return m ? n + m[1].split(",").length : n;
   }, 0);
-  const codeMax = nv > 3 ? _SID_PLAYER_CODE_MAX + _SID_PLAYER_2SID_EXTRA : _SID_PLAYER_CODE_MAX;
+  const codeMax = (nv > 3 ? _SID_PLAYER_CODE_MAX + _SID_PLAYER_2SID_EXTRA : _SID_PLAYER_CODE_MAX) + (a.ext ? 0xC0 : 0);
   const split = 0xC000 + codeMax + dataBytes + stateSize > 0xD000;
   _sidExportAsmPlayable.dataOrg = split ? (0xA000 - dataBytes) & 0xFF00 : 0xC000;
   if (split) lines.length = dataStart;
@@ -8897,11 +9123,23 @@ function _sidExportUbBlock() {
       lines.push("  igate " + [i, ins.gateTimer, ins.hr ? 1 : 0, hx(ins.firstWave, 2)].join(", "));
     }
     if (ins.table.length) {
-      const steps = ins.table.map(function(s) {
+      // the UB table has one speed and no pulse width / filter steps: own lengths are written out frame by frame
+      let src = ins.table, speed = ins.tableSpeed, loop = ins.tableLoop;
+      if (src.some(function(s){ return s.dur; })) {
+        src = []; speed = 1;
+        ins.table.forEach(function(s, k) {
+          if (k === ins.tableLoop) loop = src.length;
+          for (let n = s.dur || ins.tableSpeed; n > 0 && src.length < 32; n--) src.push(s);
+        });
+      }
+      src = src.slice(0, 32);
+      if (loop >= src.length) loop = -1;
+      if (ins.table.some(function(s){ return s.flt || s.pw != null; })) lines.push("# NOTE: UltimateBasic has no pulse width / filter table steps: instrument " + i + " loses them.");
+      const steps = src.map(function(s) {
         const w = s.w ? (s.w & 0xFF).toString(16).toUpperCase().padStart(2, "0") : "..";
         return '"' + w + " " + (s.abs ? "=" + s.n : (s.n < 0 ? "-" : "+") + Math.abs(s.n)) + '"';
       });
-      lines.push("  itab " + [i, ins.tableSpeed, ins.tableLoop < 0 ? 255 : ins.tableLoop].join(", ") + ", " + steps.join(", "));
+      lines.push("  itab " + [i, speed, loop < 0 ? 255 : loop].join(", ") + ", " + steps.join(", "));
     }
   });
   for (let i = 0; i < song.length; i += 16) lines.push("  order " + song.slice(i, i + 16).join(", "));
@@ -9052,7 +9290,7 @@ function setupSidEditor() {
   onId("sid-table-preset", "change", function(e){ _sidApplyTablePreset(e.target.value); });
   onId("sid-table-add", "click", function(){
     const inst = _sidCurInst();
-    if (inst.table.length >= 32) return;
+    if (inst.table.length >= 64) return;
     const last = inst.table[inst.table.length - 1];
     inst.table.push(last ? { w: 0, n: last.abs ? last.n : 0, abs: last.abs } : { w: 0, n: 0, abs: false });
     _sidTableEdited();

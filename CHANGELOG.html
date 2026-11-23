@@ -356,6 +356,11 @@ code {
     });
   </script>
 <h1 id="changelog">Changelog</h1>
+<h2 id="185---2026-11-23">1.8.5 - 2026-11-23</h2>
+<ul>
+<li>Wave / arpeggio table: a step can have its own <strong>length</strong>, <strong>pulse width</strong> and <strong>filter</strong> (cutoff, resonance, mode, routed voices), under the <strong>…</strong> button of the step, and a table can have 64 steps. The exported 6502 player plays them; tunes without such steps get no extra tables. The UltimateBasic export leaves the pulse width and the filter out. Files with such steps need 1.8.5 or later.</li>
+<li>.sid import: speech and other sounds that step the waveform, pulse width and filter from frame to frame (GoatTracker tables) come in as such steps instead of one sweep per note. GoatTracker's hard restart (ADSR <code>0F 00</code>) is recognized.</li>
+</ul>
 <h2 id="184---2026-11-19">1.8.4 - 2026-11-19</h2>
 <ul>
 <li>Shared SID emulation: VA SID Core, reSID and the cycle-exact 6510 / CIA / VIC-II now come from one library, <a href="https://github.com/zstarczali/VA-SID">va-sid</a>, which C64 Visual Assembler uses too, so both apps play every tune the same way. The sound does not change.</li>

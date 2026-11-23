@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.8.4**
+**Version 1.8.5**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -269,11 +269,12 @@ After **Delay** frames (0–255), a triangle LFO turns every **Speed** frames (0
 
 ### Wave / arpeggio table
 
-A table of up to 32 steps runs during the note, and this is how arpeggios and drums are made. Each step has:
+A table of up to 64 steps runs during the note, and this is how arpeggios and drums are made. Each step has:
 
 - a **waveform**, or — to keep the current one;
 - a **note**: an offset in semitones, or **abs** for an absolute note;
 - **gate off**: from this step on the gate is released (the release phase) until the next note, for drums and plucked sounds within one note.
+- **…**: the step's details. **Frames** is its own length (empty: the table's speed), **PW** a pulse width (empty: unchanged), and **Filter** sets cutoff, resonance, mode and the routed voices of the voice's SID. Speech and other fast-changing sounds are made this way. The UltimateBasic export leaves the pulse width and the filter out, and files with such steps need version 1.8.5 or later.
 
 **Speed** (1–15) is the number of frames per step. **Loop** jumps back to a chosen step at the end, or **No loop** stays on the last step. **+ Step** adds a step.
 
@@ -525,7 +526,7 @@ Choose the subtune and the length in seconds (up to 900), and press **Import**. 
 
 - **Notes:** a note starts at a gate edge, and a retrigger within 2 frames counts as one note. A pitch change under a held gate that stays at least 5 frames becomes a legato note (`L` effect), so the envelope goes on as in the original. Where a row needs an `F` effect, the legato note gives way and is retriggered. NTSC tunes are retuned to the PAL note table.
 - **Rows:** a silent intro is made of whole rows; rows start exactly on the note starts. Rows one frame longer (funktempo, swing, tempo changes) are set with `F` effects.
-- **Instruments:** AD / SR, waveform, pulse width and PWM, the filter, and the waveform and pitch of every frame of the note, as a wave table of up to 32 steps. A gate released inside a note becomes a **gate off** table step, so the tune's own ADSR stays; gate timer and hard restart come from the frames before the next note. A regular sub-semitone wobble becomes the instrument's vibrato. Identical instruments are shared, up to 128.
+- **Instruments:** AD / SR, waveform, pulse width and PWM, the filter, and the waveform and pitch of every frame of the note, as a wave table of up to 32 steps. Speech-like notes, which step the waveform, pulse width and filter by themselves, become tables of up to 64 steps with all of these. A gate released inside a note becomes a **gate off** table step, so the tune's own ADSR stays; gate timer and hard restart come from the frames before the next note. A regular sub-semitone wobble becomes the instrument's vibrato. Identical instruments are shared, up to 128.
 - **Filter and pulse movement:** a filter sweep counts over the whole note, also after the waveform went silent, and it ends where another note restarts the filter. A filter table that falls fast counts by when it gets there, within the player's 127 per frame. A filter LFO bounces between its extremes. An instrument holds the pulse range of all its notes. Pulse and filter still restart at each routed note, so a sweep that runs freely across many notes is only approximated, and pitches that lie between semitones are rounded to the nearest one.
 - **Several SIDs:** a 2SID tune becomes six voices with its second address. A 3SID tune imports its first two SIDs, with a notice.
 - **Not supported:** RSID tunes that start as a BASIC program.

@@ -1,30 +1,33 @@
-VA SID STUDIO 1.8.4 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.5 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.8.4: the SID emulation is the va-sid library shared with
-C64 Visual Assembler (the sound does not change), and About shows its
-version. 1.8.3: tunes and modules fade out at the end of their length
-(Settings: Fade out at the end), the next HVSC / Modland result is
-downloaded ahead so the switch has no gap, and the original code is now
-MIT-licensed. 1.8.2: a click on an HVSC or Modland result plays it without
-adding it to the playlist, and playback goes on through the results.
-1.8.1: five new themes (Ruby, Amethyst, Phosphor, Retro 80s,
+New in 1.8.5: wave table steps with their own length, pulse width and
+filter (64 steps per table), and .sid import keeps speech and other
+GoatTracker table sounds. 1.8.4: the SID emulation is the va-sid library
+shared with C64 Visual Assembler (the sound does not change), and About
+shows its version. 1.8.3: tunes and modules fade out at the end of their
+length (Settings: Fade out at the end), the next HVSC / Modland result
+is downloaded ahead so the switch has no gap, and the original code is
+now MIT-licensed. 1.8.2: a click on an HVSC or Modland result plays it
+without adding it to the playlist, and playback goes on through the
+results. 1.8.1: five new themes (Ruby, Amethyst, Phosphor, Retro 80s,
 Retro 8-bit), the Channel curves window resizes inside the SID Editor
-again, and the app runs on Tauri 2.12. 1.8.0: the SID Editor's L (legato) effect and gate-off table steps,
-a closer .sid import, and VA SID Core 1.3 with an 8580 digi boost setting
-for loud $D418 samples. 1.7.2: the Channels view of the Spectrum analyzer follows the Bands
+again, and the app runs on Tauri 2.12. 1.8.0: the SID Editor's L
+(legato) effect and gate-off table steps, a closer .sid import, and VA
+SID Core 1.3 with an 8580 digi boost setting for loud $D418 samples.
+1.7.2: the Channels view of the Spectrum analyzer follows the Bands
 setting for MOD and other tracker modules too. 1.7.1: the main window no
-longer flashes up empty at start, and the SID Player toolbar has separators
-between its button groups. 1.7.0 brought
-1-5 star ratings and duplicate removal in the SID Player playlist, opening
-.sidpl playlists by double click, a download spinner on tunes, and a MOD
-Player buffer setting. See CHANGELOG.md for release notes and
-VA SID Studio Manual.md (or docs/VA SID Studio Manual.pdf) for full usage.
-Upgrading keeps your saved settings and edited tune in application storage.
+longer flashes up empty at start, and the SID Player toolbar has
+separators between its button groups. 1.7.0 brought 1-5 star ratings and
+duplicate removal in the SID Player playlist, opening .sidpl playlists
+by double click, a download spinner on tunes, and a MOD Player buffer
+setting. See CHANGELOG.md for release notes and VA SID Studio Manual.md
+(or docs/VA SID Studio Manual.pdf) for full usage. Upgrading keeps your
+saved settings and edited tune in application storage.
 
 1. DOWNLOADING PREBUILT INSTALLERS
 ---------------------------------
