@@ -1,6 +1,7 @@
 //! WebView2 asks the user about Web MIDI on every `requestMIDIAccess()`, in a web
 //! dialog of its own. The page is the app itself and connects only when the Connect
-//! MIDI button is pressed, so that request is granted here. Every other permission
+//! MIDI button is pressed, or at start after it was pressed once (the remembered
+//! connection), so that request is granted here, without a prompt at start too. Every other permission
 //! stays with WebView2. macOS and Linux web views have no Web MIDI to ask about.
 
 #[cfg(windows)]

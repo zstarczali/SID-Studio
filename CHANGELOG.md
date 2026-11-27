@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.6 - 2026-11-27
+
+- MIDI controllers on the knobs: right-click a knob (instrument parameters, master volume, the VA-VK instrument knob, the player volume) and choose **MIDI Learn (hardware knob)**, then turn a knob or fader on your MIDI controller: from then on it drives that knob, over its whole range. A mapped knob shows its CC number; the same menu removes one mapping or all of them. The mappings are kept between sessions.
+- MIDI controllers on the buttons: right-click Play, Pause, Stop, Record, Undo or Redo (on the toolbar, in the piano roll or in VA-VK) → **MIDI Learn (hardware button)**, then press a button or pad on your MIDI controller: a transport button (Control Change) or a pad (a note, which then no longer plays) presses that button, once per press, while it is enabled. The mapping is saved with the knob mappings.
+- Connect MIDI is remembered: after you connect once, the app connects again at start, without a message, and selects the same MIDI input (found by its id, or by its name when the system gave it a new id). If that input is not there, nothing is selected and no other input stands in; it is picked up when you plug it in. Choose **No MIDI input** in the list to stop it.
+- MIDI files: **Files → Export MIDI (.mid)…** saves the song as a Standard MIDI File (format 1, a track per voice, MIDI note = SID note + 12, tempo from the speed and PAL / NTSC, note-offs and gate timer as the player plays them, instrument changes as program changes). **Files → Import MIDI (.mid)…** reads format 0 / 1 files: pick up to 3 (or 6) tracks or channels (drum channel 10 off by default), the rows per beat and the instruments (one per track or the current one); notes are quantized to rows, the highest note of a chord is kept (or chords spread to free voices), tempo changes become `F` effects. The import can be undone.
+- The MIDI settings (knob and button mappings, the remembered input, the connect at start) are also kept in the app's config file, so they survive a new WebView profile.
+- The splash screen and the About window show the **Studio** lettering of C64 Visual Assembler.
+
 ## 1.8.5 - 2026-11-23
 
 - Wave / arpeggio table: a step can have its own **length**, **pulse width** and **filter** (cutoff, resonance, mode, routed voices), under the **…** button of the step, and a table can have 64 steps. The exported 6502 player plays them; tunes without such steps get no extra tables. The UltimateBasic export leaves the pulse width and the filter out. Files with such steps need 1.8.5 or later.

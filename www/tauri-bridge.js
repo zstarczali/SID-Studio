@@ -10,6 +10,8 @@
     checkForUpdate: () => invoke("check_for_update"),
     downloadAndInstallUpdate: (version, hotfix = 0) => invoke("download_and_install_update", { version, hotfix }),
     getUpdateServer: () => invoke("get_update_server"),
+    getMidiSettings: () => invoke("get_midi_settings"),
+    saveMidiSettings: (settings) => invoke("save_midi_settings", { settings }),
     setUpdateServer: (url) => invoke("set_update_server", { url }),
     onUpdateProgress: (cb) => window.__TAURI__.event.listen("update-download-progress", e => cb(e.payload)),
     openManual: () => invoke("open_manual"),

@@ -748,28 +748,94 @@ function _sidFps() { return _sidIsNtsc() ? 60 : 50; }
 function _sidClockHz() { return _sidIsNtsc() ? 1022730 : 985248; }
 
 // n: 0 = C-0
+// The remembered MIDI input: its id and its name (an id can change between sessions; the
+// name is tried after the id). "c64va-sid-midi-auto" = "1": connect at start (set by a
+// successful Connect MIDI or by picking an input, cleared by picking "No MIDI input").
+const _SID_MIDI_KEY_ID = "c64va-sid-midi-input";
+const _SID_MIDI_KEY_NAME = "c64va-sid-midi-input-name";
+const _SID_MIDI_KEY_AUTO = "c64va-sid-midi-auto";
+// No initializers: plain state, set by _sidMidiOpen / _sidMidiSetInput.
+var _sidMidiSaved; // { id, name } of the remembered input
+var _sidMidiStrict; // automatic connect: only the remembered input, never another one
+
+function _sidMidiLoadSaved() {
+  let id = "", name = "";
+  try {
+    id = localStorage.getItem(_SID_MIDI_KEY_ID) || "";
+    name = localStorage.getItem(_SID_MIDI_KEY_NAME) || "";
+  } catch (_) {}
+  _sidMidiSaved = { id: id, name: name };
+  return _sidMidiSaved;
+}
+
+function _sidMidiAutoEnabled() {
+  try { return localStorage.getItem(_SID_MIDI_KEY_AUTO) === "1"; } catch (_) { return false; }
+}
+
+function _sidMidiSetAuto(on) {
+  try {
+    if (on) localStorage.setItem(_SID_MIDI_KEY_AUTO, "1");
+    else localStorage.removeItem(_SID_MIDI_KEY_AUTO);
+  } catch (_) {}
+  _sidMidiSettingsPersist();
+}
+
+function _sidMidiInputLabel(input) {
+  return input ? (input.name || input.manufacturer || input.id) : "";
+}
+
+// The input to use: the one with the remembered id, else the first one with the remembered
+// name, else "" (the caller decides whether another input may stand in).
+function _sidMidiMatchInput(inputs, id, name) {
+  if (!inputs) return "";
+  if (id && inputs.has(id)) return id;
+  let found = "";
+  if (name) inputs.forEach(function(input) {
+    if (!found && _sidMidiInputLabel(input) === name) found = input.id;
+  });
+  return found;
+}
+
 function _sidMidiRefreshInputs() {
   const select = document.getElementById("sid-midi-input");
   if (!select || !_sidMidiAccess) return;
-  const old = _sidMidiInputId || select.value;
   select.innerHTML = '<option value="">' + t("sidMidiNone") + '</option>';
   _sidMidiAccess.inputs.forEach(function(input) {
     const option = document.createElement("option");
     option.value = input.id;
-    option.textContent = input.name || input.manufacturer || input.id;
+    option.textContent = _sidMidiInputLabel(input);
     select.appendChild(option);
   });
-  const wanted = _sidMidiAccess.inputs.has(old) ? old : (_sidMidiAccess.inputs.keys().next().value || "");
+  const saved = _sidMidiSaved || _sidMidiLoadSaved();
+  let wanted = _sidMidiMatchInput(_sidMidiAccess.inputs, _sidMidiInputId || saved.id, saved.name);
+  if (!wanted && !_sidMidiStrict) wanted = _sidMidiAccess.inputs.keys().next().value || "";
   select.value = wanted;
-  _sidMidiSetInput(wanted);
+  // No input to use (the remembered one is unplugged): keep remembering it, so it is picked
+  // up again when it comes back.
+  _sidMidiSetInput(wanted, { remember: !!wanted });
 }
 
-function _sidMidiSetInput(id) {
+// opts.remember: store the input as the remembered one (default). opts.user: the user picked it
+// in the list; "No MIDI input" then also turns off the automatic connect at start.
+function _sidMidiSetInput(id, opts) {
+  const remember = !opts || opts.remember !== false;
   if (_sidMidiAccess) _sidMidiAccess.inputs.forEach(function(input) { input.onmidimessage = null; });
   _sidMidiInputId = id || "";
   const input = _sidMidiAccess?.inputs.get(_sidMidiInputId);
   if (input) input.onmidimessage = _sidMidiMessage;
-  try { localStorage.setItem("c64va-sid-midi-input", _sidMidiInputId); } catch (_) {}
+  if (!remember) return;
+  const name = input ? _sidMidiInputLabel(input) : "";
+  _sidMidiSaved = { id: _sidMidiInputId, name: name };
+  try {
+    localStorage.setItem(_SID_MIDI_KEY_ID, _sidMidiInputId);
+    localStorage.setItem(_SID_MIDI_KEY_NAME, name);
+  } catch (_) {}
+  _sidMidiSettingsPersist();
+  if (opts && opts.user) {
+    // "No MIDI input" stays: a device plugged in later is not selected by itself
+    _sidMidiStrict = !_sidMidiInputId;
+    _sidMidiSetAuto(!!_sidMidiInputId);
+  }
 }
 
 let _sidMidiLedTimer = null;
@@ -787,10 +853,17 @@ function _sidMidiMessage(event) {
   // Clock / active sensing (real-time üzenetek) nem villantja a lámpát
   if (data.length && data[0] < 0xF8) _sidMidiFlash();
   const command = data[0] & 0xf0;
+  // Control Change: a hardware knob / fader on a mapped knob (or MIDI Learn)
+  if (command === 0xB0 && data.length >= 3) {
+    _sidMidiControl(data[0] & 0x0f, data[1], data[2]);
+    return;
+  }
   const midiNote = data[1];
   const velocity = data[2] || 0;
   if (!Number.isFinite(midiNote)) return;
   const note = Math.max(0, Math.min(95, midiNote - 12)); // MIDI C-1 = SID C-0
+  // a pad mapped to a button (Play, Record …) presses it instead of playing
+  if ((command === 0x80 || command === 0x90) && _sidMidiNote(data[0] & 0x0f, midiNote, command === 0x90 && velocity > 0)) return;
   if (command === 0x80 || (command === 0x90 && velocity === 0)) {
     _sidMidiHeld.delete(midiNote);
     _sidRecordPolyRelease(midiNote);
@@ -811,20 +884,36 @@ function _sidMidiMessage(event) {
   }
 }
 
-async function _sidMidiConnect() {
+// auto: the quiet connect at start. No toasts; only the remembered input is selected, and it is
+// picked up when it is plugged in later (onstatechange).
+async function _sidMidiOpen(auto) {
   if (!navigator.requestMIDIAccess) {
-    showViceToast(t("sidMidiUnavailable"), true);
-    return;
+    if (!auto) showViceToast(t("sidMidiUnavailable"), true);
+    return false;
   }
   try {
-    _sidMidiAccess = await navigator.requestMIDIAccess();
-    try { _sidMidiInputId = localStorage.getItem("c64va-sid-midi-input") || ""; } catch (_) {}
-    _sidMidiAccess.onstatechange = _sidMidiRefreshInputs;
+    const access = await navigator.requestMIDIAccess();
+    _sidMidiAccess = access;
+    _sidMidiStrict = !!auto;
+    _sidMidiInputId = "";
+    _sidMidiLoadSaved();
+    access.onstatechange = _sidMidiRefreshInputs;
     _sidMidiRefreshInputs();
-    if (!_sidMidiInputId) showViceToast(t("sidMidiNone"), true);
+    _sidMidiSetAuto(true);
+    if (!auto && !_sidMidiInputId) showViceToast(t("sidMidiNone"), true);
+    return true;
   } catch (error) {
-    showViceToast(t("sidMidiDenied") + ": " + (error?.message || error), true);
+    if (!auto) showViceToast(t("sidMidiDenied") + ": " + (error?.message || error), true);
+    return false;
   }
+}
+
+function _sidMidiConnect() { return _sidMidiOpen(false); }
+
+// At start: connect again if the user connected before (and did not pick "No MIDI input").
+function _sidMidiAutoConnect() {
+  if (!_sidMidiAutoEnabled() || !navigator.requestMIDIAccess) return Promise.resolve(false);
+  return _sidMidiOpen(true);
 }
 
 function _sidInsertNoteAtSelection(note, advanceRow) {
@@ -1613,6 +1702,11 @@ function _sidVkbdInstKnobBind() {
   const knob = document.getElementById("sid-vkbd-inst-knob");
   if (!knob || knob._bound) return;
   knob._bound = true;
+  // a MIDI controller steps through the instruments over its whole range
+  _sidMidiKnobRegister(knob, function(pct) {
+    const n = (_sidInsts && _sidInsts.length) || 0;
+    if (n) _sidVkbdSelectInst(Math.round(pct * (n - 1) / 100));
+  });
   let drag = null;
   knob.addEventListener("pointerdown", function(e) {
     drag = { x: e.clientX, y: e.clientY, index: _sidInst | 0 };
@@ -1795,6 +1889,64 @@ function _sidCutSelection() {
 function _sidHideCtxMenu() {
   const menu = document.getElementById("sid-ctx-menu");
   if (menu) menu.hidden = true;
+}
+
+// A right-click menu of plain entries ({ label, disabled, run }), shown in `host` (the knob's
+// dialog). The tracker cells have their own menu (#sid-ctx-menu).
+let _sidItemMenuItems = [];
+function _sidHideItemMenu() {
+  const menu = document.getElementById("sid-item-menu");
+  if (menu) menu.hidden = true;
+}
+function _sidShowItemMenu(e, host, items) {
+  e.preventDefault();
+  _sidHideCtxMenu();
+  let menu = document.getElementById("sid-item-menu");
+  if (!menu) {
+    menu = document.createElement("div");
+    menu.id = "sid-item-menu";
+    menu.className = "block-ctx-menu sid-ctx-menu";
+    menu.hidden = true;
+    menu.addEventListener("click", function(evt) {
+      const btn = evt.target.closest("[data-index]");
+      if (!btn || btn.disabled) return;
+      const item = _sidItemMenuItems[+btn.dataset.index];
+      _sidHideItemMenu();
+      if (item && item.run) item.run();
+    });
+    // the entries do not take the focus: it stays on the knob
+    menu.addEventListener("mousedown", function(evt) { evt.preventDefault(); });
+    menu.addEventListener("contextmenu", function(evt) { evt.preventDefault(); evt.stopPropagation(); });
+    document.addEventListener("pointerdown", function(evt) {
+      if (!(evt.target instanceof Element) || !evt.target.closest("#sid-item-menu")) _sidHideItemMenu();
+    }, true);
+    document.addEventListener("keydown", function(evt) {
+      if (evt.key !== "Escape" || menu.hidden) return;
+      _sidHideItemMenu();
+      evt.preventDefault();
+      evt.stopPropagation();
+    }, true);
+  }
+  if (menu.parentNode !== host) {
+    host.appendChild(menu);
+    host.addEventListener("close", _sidHideItemMenu);
+  }
+  _sidItemMenuItems = items;
+  menu.textContent = "";
+  items.forEach(function(item, i) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "block-ctx-item sid-ctx-item";
+    btn.dataset.index = i;
+    btn.disabled = !!item.disabled;
+    const label = document.createElement("span");
+    label.className = "sid-ctx-label";
+    label.textContent = item.label;
+    btn.appendChild(label);
+    menu.appendChild(btn);
+  });
+  menu.hidden = false;
+  _ctxMenuPlaceAt(menu, e.clientX, e.clientY);
 }
 
 function _sidShowCtxMenu(e, voice, row) {
@@ -2999,9 +3151,202 @@ function _sidKnobRender(knob, pct) {
   knob.setAttribute("aria-valuenow", String(pct));
 }
 
+/* ── MIDI controllers on the knobs ──
+   Right click on a knob → MIDI Learn: the next CC message (a hardware knob / fader) is mapped to it,
+   "channel:cc" → knob id, kept in localStorage "c64va-sid-midi-cc". A CC value 0-127 sets the knob
+   0-100 % through the knob's own setter (the same as a drag), only while its dialog is open. */
+const _SID_MIDI_KEY_CC = "c64va-sid-midi-cc";
+const _sidMidiKnobs = new Map();   // knob id → { knob, set(pct) }
+let _sidMidiCcMap = null;          // "ch:cc" → knob id
+let _sidMidiLearnId = "";          // the knob waiting for a CC (MIDI Learn)
+function _sidMidiCcMapGet() {
+  if (_sidMidiCcMap) return _sidMidiCcMap;
+  _sidMidiCcMap = {};
+  try {
+    const saved = JSON.parse(localStorage.getItem(_SID_MIDI_KEY_CC) || "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      for (const [key, id] of Object.entries(saved)) {
+        // "ch:cc" (a knob or a CC button) or "n:ch:note" (a pad on a button)
+        const m = /^(?:n:)?(\d{1,2}):(\d{1,3})$/.exec(key);
+        if (m && +m[1] <= 15 && +m[2] <= 127 && typeof id === "string" && id) _sidMidiCcMap[key] = id;
+      }
+    }
+  } catch (_) {}
+  return _sidMidiCcMap;
+}
+function _sidMidiCcSave() {
+  try { localStorage.setItem(_SID_MIDI_KEY_CC, JSON.stringify(_sidMidiCcMapGet())); } catch (_) {}
+  _sidMidiKnobs.forEach(function(entry) { _sidMidiKnobMark(entry.knob); });
+  _sidMidiSettingsPersist();
+}
+/* The MIDI settings (knob / button mappings, the remembered input, automatic connect) are also kept
+   in the app's config file ("midi", Rust get_midi_settings / save_midi_settings), so they survive a
+   new WebView profile. At start the config file wins (_sidMidiSettingsRestore, before the automatic
+   connect); localStorage stays the working copy. */
+function _sidMidiSettingsGet() {
+  const out = { cc: {}, input: "", inputName: "", auto: false };
+  try {
+    const cc = JSON.parse(localStorage.getItem(_SID_MIDI_KEY_CC) || "{}");
+    if (cc && typeof cc === "object" && !Array.isArray(cc)) out.cc = cc;
+    out.input = localStorage.getItem(_SID_MIDI_KEY_ID) || "";
+    out.inputName = localStorage.getItem(_SID_MIDI_KEY_NAME) || "";
+    out.auto = localStorage.getItem(_SID_MIDI_KEY_AUTO) === "1";
+  } catch (_) {}
+  return out;
+}
+function _sidMidiSettingsApply(saved) {
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
+  const text = function(v) { return typeof v === "string" ? v : ""; };
+  try {
+    const cc = saved.cc && typeof saved.cc === "object" && !Array.isArray(saved.cc) ? saved.cc : {};
+    localStorage.setItem(_SID_MIDI_KEY_CC, JSON.stringify(cc));
+    if (text(saved.input)) localStorage.setItem(_SID_MIDI_KEY_ID, text(saved.input));
+    else localStorage.removeItem(_SID_MIDI_KEY_ID);
+    if (text(saved.inputName)) localStorage.setItem(_SID_MIDI_KEY_NAME, text(saved.inputName));
+    else localStorage.removeItem(_SID_MIDI_KEY_NAME);
+    if (saved.auto === true) localStorage.setItem(_SID_MIDI_KEY_AUTO, "1");
+    else localStorage.removeItem(_SID_MIDI_KEY_AUTO);
+  } catch (_) {}
+  _sidMidiCcMap = null;       // read (and checked) again from the stored copy
+  _sidMidiSaved = undefined;  // the remembered input too
+  _sidMidiKnobs.forEach(function(entry) { _sidMidiKnobMark(entry.knob); });
+}
+function _sidMidiSettingsPersist() {
+  try {
+    const p = window.electronAPI?.saveMidiSettings?.(_sidMidiSettingsGet());
+    if (p && typeof p.catch === "function") p.catch(function() {});
+  } catch (_) {}
+}
+// At start: the config file's settings, or (first start after this version) the local ones copied there.
+async function _sidMidiSettingsRestore() {
+  if (!window.electronAPI?.getMidiSettings) return;
+  try {
+    const saved = await window.electronAPI.getMidiSettings();
+    if (saved && typeof saved === "object") _sidMidiSettingsApply(saved);
+    else _sidMidiSettingsPersist();
+  } catch (_) {}
+}
+// The "ch:cc" a knob is mapped to ("" when none).
+function _sidMidiCcOf(id) {
+  const map = _sidMidiCcMapGet();
+  return Object.keys(map).find(function(key) { return map[key] === id; }) || "";
+}
+// "CC 21 (channel 1)" of a "ch:cc" key, "Note 36 (channel 10)" of a "n:ch:note" key (a button)
+function _sidMidiCcText(key) {
+  if (key.startsWith("n:")) {
+    const [ch, note] = key.slice(2).split(":").map(Number);
+    return tf("sidMidiNoteName", { note: note, ch: ch + 1 });
+  }
+  const [ch, cc] = key.split(":").map(Number);
+  return tf("sidMidiCcName", { cc: cc, ch: ch + 1 });
+}
+function _sidMidiKnobMark(knob) {
+  const key = _sidMidiCcOf(knob.id);
+  knob.classList.toggle("sid-knob--midi", !!key);
+  knob.classList.toggle("sid-knob--learning", _sidMidiLearnId === knob.id);
+  // the CC number as a small badge on the knob (style.css .sid-knob--midi::after)
+  if (key) knob.dataset.midiCc = key.startsWith("n:") ? "n" + key.split(":")[2] : key.split(":")[1];
+  else delete knob.dataset.midiCc;
+}
+// A knob MIDI controllers can drive: its right-click menu and its mapping mark.
+function _sidMidiKnobRegister(knob, set) {
+  if (!knob?.id || _sidMidiKnobs.has(knob.id)) return;
+  _sidMidiKnobs.set(knob.id, { knob: knob, set: set });
+  knob.addEventListener("contextmenu", function(e) {
+    e.stopPropagation();
+    _sidMidiKnobMenu(e, knob);
+  });
+  _sidMidiKnobMark(knob);
+}
+/* A button MIDI controllers can press (Play, Stop, Record, Undo …): learned like a knob, from a
+   CC (a transport button: 127 down, 0 up) or a note (a pad). It is clicked once per press, only
+   while it is enabled and its dialog is open. */
+function _sidMidiButtonRegister(button) {
+  if (!button?.id || _sidMidiKnobs.has(button.id)) return;
+  const entry = { knob: button, button: true, down: false, set: function(pct) {
+    const down = pct >= 50;
+    if (down && !entry.down && !button.disabled) button.click();
+    entry.down = down;
+  } };
+  _sidMidiKnobs.set(button.id, entry);
+  button.addEventListener("contextmenu", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    _sidMidiKnobMenu(e, button);
+  });
+  // a disabled button (Undo with nothing to undo) gets no events of its own: its parent's do
+  button.parentElement?.addEventListener("contextmenu", function(e) {
+    if (e.target === button || !button.disabled) return;
+    const r = button.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    e.preventDefault();
+    e.stopPropagation();
+    _sidMidiKnobMenu(e, button);
+  });
+  _sidMidiKnobMark(button);
+}
+function _sidMidiKnobMenu(e, knob) {
+  const key = _sidMidiCcOf(knob.id);
+  const learning = _sidMidiLearnId === knob.id;
+  const count = Object.keys(_sidMidiCcMapGet()).length;
+  _sidShowItemMenu(e, knob.closest("dialog") || document.body, [
+    { label: learning ? t("sidMidiLearnCancel") : t(_sidMidiKnobs.get(knob.id)?.button ? "sidMidiLearnButton" : "sidMidiLearn"), run: function() { learning ? _sidMidiLearnStop() : _sidMidiLearnStart(knob); } },
+    { label: key ? tf("sidMidiUnmap", { cc: _sidMidiCcText(key) }) : t("sidMidiUnmapNone"), disabled: !key, run: function() {
+      delete _sidMidiCcMapGet()[key];
+      _sidMidiCcSave();
+    } },
+    { label: t("sidMidiUnmapAll"), disabled: !count, run: function() {
+      _sidMidiCcMap = {};
+      _sidMidiCcSave();
+    } },
+  ]);
+}
+function _sidMidiLearnStart(knob) {
+  _sidMidiLearnId = knob.id;
+  _sidMidiKnobs.forEach(function(entry) { _sidMidiKnobMark(entry.knob); });
+  if (!_sidMidiAccess) _sidMidiConnect();
+  showViceToast(t(_sidMidiKnobs.get(knob.id)?.button ? "sidMidiLearnButtonHint" : "sidMidiLearnHint"));
+}
+function _sidMidiLearnStop() {
+  _sidMidiLearnId = "";
+  _sidMidiKnobs.forEach(function(entry) { _sidMidiKnobMark(entry.knob); });
+}
+// A Control Change message: MIDI Learn takes it, else the mapped knob follows it.
+function _sidMidiControl(channel, cc, value) {
+  _sidMidiMapped(channel + ":" + cc, Math.max(0, Math.min(127, value)) * 100 / 127);
+}
+// A note on / off: a button mapped to it (or learning one) takes it, else it plays (false).
+function _sidMidiNote(channel, note, on) {
+  const key = "n:" + channel + ":" + note;
+  const learning = _sidMidiLearnId && _sidMidiKnobs.get(_sidMidiLearnId)?.button;
+  if (!learning && !_sidMidiCcMapGet()[key]) return false;
+  if (learning && !on) return true;   // the release of a note learned earlier
+  _sidMidiMapped(key, on ? 100 : 0);
+  return true;
+}
+function _sidMidiMapped(key, pct) {
+  const map = _sidMidiCcMapGet();
+  if (_sidMidiLearnId) {
+    const id = _sidMidiLearnId;
+    // one controller per knob, one knob per controller
+    Object.keys(map).forEach(function(k) { if (map[k] === id) delete map[k]; });
+    map[key] = id;
+    _sidMidiLearnId = "";
+    _sidMidiCcSave();
+    showViceToast(tf("sidMidiLearned", { cc: _sidMidiCcText(key) }));
+    return;
+  }
+  const entry = _sidMidiKnobs.get(map[key]);
+  if (!entry || !entry.knob.isConnected) return;
+  const dialog = entry.knob.closest("dialog");
+  if (dialog && !dialog.open) return;
+  entry.set(pct);
+}
+
 // Drag up / right = louder (200 px for the full range), wheel ±2, keys ±1 / ±10.
 function _sidKnobBind(knob, get, set) {
   if (!knob) return;
+  _sidMidiKnobRegister(knob, set);
   let drag = null;
   knob.addEventListener("pointerdown", function(e) {
     drag = { x: e.clientX, y: e.clientY, value: get() };
@@ -8073,6 +8418,487 @@ async function _sidRunSidImport() {
   }
 }
 
+/* ── Standard MIDI File (.mid) import / export ──────────────────────────────
+ * A plain SMF reader and writer (format 0 / 1, ticks per quarter note). The
+ * export walks the song order the way the player does (speed changes, note
+ * cuts, gate timer) and writes one track per voice; the import quantizes the
+ * notes of the chosen tracks / channels to rows. MIDI note = SID note + 12,
+ * the same mapping as the live MIDI input. */
+const _SID_SMF_VEL = 100;
+
+function _sidSmfError(key) {
+  const err = new Error(key);
+  err.i18nKey = key;
+  return err;
+}
+
+/* Variable-length quantity: 7 bits per byte, high bit set on all but the last. */
+function _sidSmfVlq(n) {
+  n = Math.max(0, Math.min(0x0FFFFFFF, Math.floor(n))) >>> 0;
+  const out = [n & 0x7F];
+  n >>>= 7;
+  while (n) { out.unshift((n & 0x7F) | 0x80); n >>>= 7; }
+  return out;
+}
+
+function _sidSmfMeta(type, data) {
+  return [0xFF, type].concat(_sidSmfVlq(data.length), data);
+}
+
+function _sidSmfText(str) {
+  return Array.from(new TextEncoder().encode(String(str || "")));
+}
+
+function _sidSmfDecode(data) {
+  let s;
+  try { s = new TextDecoder("utf-8", { fatal: true }).decode(data); }
+  catch (_) { s = Array.from(data, function(c) { return String.fromCharCode(c); }).join(""); }
+  return s.replace(/[\u0000-\u001F]+/g, " ").trim();
+}
+
+/* smf = { format, division, tracks: [[{ t: tick, d: [event bytes] }]] }. Each
+   track is sorted by tick; events on the same tick keep their order. */
+function _sidSmfWrite(smf) {
+  const out = [];
+  const u32 = function(n) { out.push((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255); };
+  const u16 = function(n) { out.push((n >> 8) & 255, n & 255); };
+  out.push(0x4D, 0x54, 0x68, 0x64); u32(6); u16(smf.format); u16(smf.tracks.length); u16(smf.division);
+  smf.tracks.forEach(function(events) {
+    const list = events.map(function(ev, i) { return { t: Math.max(0, Math.round(ev.t)), d: ev.d, i: i }; });
+    list.sort(function(a, b) { return a.t - b.t || a.i - b.i; });
+    const body = [];
+    let last = 0;
+    list.forEach(function(ev) {
+      _sidSmfVlq(ev.t - last).forEach(function(x) { body.push(x); });
+      ev.d.forEach(function(x) { body.push(x & 255); });
+      last = ev.t;
+    });
+    body.push(0, 0xFF, 0x2F, 0);
+    out.push(0x4D, 0x54, 0x72, 0x6B); u32(body.length);
+    for (let k = 0; k < body.length; k++) out.push(body[k]);
+  });
+  return Uint8Array.from(out);
+}
+
+/* One MTrk chunk → { name, events: [{ t, kind: on|off|prog|tempo|timesig, ... }] }.
+   Running status, meta events, SysEx (skipped). A note on with velocity 0 is a note off. */
+function _sidSmfParseTrack(b, p, end) {
+  const events = [];
+  let t = 0, status = 0, name = "";
+  const need = function(n) { if (p + n > end) throw _sidSmfError("sidSmfErrTruncated"); };
+  const vlq = function() {
+    let v = 0;
+    for (let k = 0; k < 4; k++) {
+      need(1);
+      const c = b[p++];
+      v = (v << 7) | (c & 0x7F);
+      if (!(c & 0x80)) return v;
+    }
+    throw _sidSmfError("sidSmfErrTruncated");
+  };
+  while (p < end) {
+    t += vlq();
+    need(1);
+    const c = b[p];
+    if (c === 0xFF) {
+      p++; need(1);
+      const type = b[p++], len = vlq();
+      need(len);
+      const data = b.subarray(p, p + len);
+      p += len;
+      status = 0;
+      if (type === 0x2F) break;
+      if (type === 0x51 && len >= 3) events.push({ t: t, kind: "tempo", us: (data[0] << 16) | (data[1] << 8) | data[2] });
+      else if (type === 0x58 && len >= 2) events.push({ t: t, kind: "timesig", num: data[0], den: 1 << Math.min(6, data[1]) });
+      else if (type === 0x03 && !name) name = _sidSmfDecode(data);
+      continue;
+    }
+    if (c === 0xF0 || c === 0xF7) {
+      p++;
+      const len = vlq();
+      need(len);
+      p += len;
+      status = 0;
+      continue;
+    }
+    if (c & 0x80) { status = c; p++; }
+    if (status < 0x80 || status >= 0xF0) throw _sidSmfError("sidSmfErrTruncated");
+    const hi = status & 0xF0, ch = status & 0x0F, n = hi === 0xC0 || hi === 0xD0 ? 1 : 2;
+    need(n);
+    const d1 = b[p] & 0x7F, d2 = n > 1 ? b[p + 1] & 0x7F : 0;
+    p += n;
+    if (hi === 0x90 && d2) events.push({ t: t, kind: "on", ch: ch, note: d1, vel: d2 });
+    else if (hi === 0x80 || hi === 0x90) events.push({ t: t, kind: "off", ch: ch, note: d1 });
+    else if (hi === 0xC0) events.push({ t: t, kind: "prog", ch: ch, prog: d1 });
+  }
+  return { name: name, events: events };
+}
+
+/* Bytes → { format, division, tracks }. Throws an Error whose i18nKey names the message. */
+function _sidSmfParse(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || []);
+  const tag = function(at) { return String.fromCharCode(b[at], b[at + 1], b[at + 2], b[at + 3]); };
+  const u32 = function(at) { return ((b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3]) >>> 0; };
+  if (b.length < 14 || tag(0) !== "MThd") throw _sidSmfError("sidSmfErrNotMidi");
+  const hlen = u32(4);
+  if (hlen < 6 || 8 + hlen > b.length) throw _sidSmfError("sidSmfErrTruncated");
+  const format = (b[8] << 8) | b[9], ntrks = (b[10] << 8) | b[11], division = (b[12] << 8) | b[13];
+  if (division & 0x8000) throw _sidSmfError("sidSmfErrSmpte");
+  if (format === 2) throw _sidSmfError("sidSmfErrFormat");
+  if (format > 2 || !division) throw _sidSmfError("sidSmfErrNotMidi");
+  const tracks = [];
+  let p = 8 + hlen;
+  while (tracks.length < ntrks && p + 8 <= b.length) {
+    const id = tag(p), len = u32(p + 4);
+    p += 8;
+    if (id === "MTrk") {
+      if (p + len > b.length) throw _sidSmfError("sidSmfErrTruncated");
+      tracks.push(_sidSmfParseTrack(b, p, p + len));
+    }
+    p += len;
+  }
+  if (ntrks && !tracks.length) throw _sidSmfError("sidSmfErrTruncated");
+  return { format: format, division: division, tracks: tracks };
+}
+
+/* The notes of every (track, channel) pair: [{ track, ch, name, drum, notes: [{ t, end, note, vel }] }].
+   A note on is closed by the first note off of the same key; open notes end at the track's last event. */
+function _sidSmfParts(smf) {
+  const parts = [], byKey = {};
+  smf.tracks.forEach(function(tr, ti) {
+    const open = {};
+    let last = 0;
+    tr.events.forEach(function(ev) {
+      last = Math.max(last, ev.t);
+      if (ev.kind !== "on" && ev.kind !== "off") return;
+      const key = ev.ch + ":" + ev.note;
+      if (ev.kind === "on") {
+        let part = byKey[ti + ":" + ev.ch];
+        if (!part) {
+          part = byKey[ti + ":" + ev.ch] = { track: ti, ch: ev.ch, name: tr.name || "", drum: ev.ch === 9, notes: [] };
+          parts.push(part);
+        }
+        const note = { t: ev.t, end: -1, note: ev.note, vel: ev.vel };
+        (open[key] = open[key] || []).push(note);
+        part.notes.push(note);
+      } else if (open[key] && open[key].length) {
+        open[key].shift().end = ev.t;
+      }
+    });
+    Object.keys(open).forEach(function(key) {
+      open[key].forEach(function(note) { note.end = Math.max(last, note.t); });
+    });
+  });
+  return parts;
+}
+
+/* The tempo map of the whole file (µs per quarter note), sorted; 120 BPM until the first tempo. */
+function _sidSmfTempos(smf) {
+  const list = [];
+  smf.tracks.forEach(function(tr) {
+    tr.events.forEach(function(ev) { if (ev.kind === "tempo" && ev.us > 0) list.push({ t: ev.t, us: ev.us }); });
+  });
+  list.sort(function(a, b) { return a.t - b.t; });
+  if (!list.length || list[0].t > 0) list.unshift({ t: 0, us: 500000 });
+  return list;
+}
+
+/* Frames per row at a tick: the tempo there, split into rowsPerBeat rows. */
+function _sidSmfRowSpeed(tempos, tick, rowsPerBeat, fps) {
+  let us = tempos[0].us;
+  for (let k = 0; k < tempos.length && tempos[k].t <= tick; k++) us = tempos[k].us;
+  return Math.max(1, Math.min(255, Math.round(us / 1e6 / rowsPerBeat * fps)));
+}
+
+/* Ticks → rows: start and end are rounded to the nearest row, a note lasts at least one row. */
+function _sidSmfQuantize(notes, ticksPerRow) {
+  return notes.map(function(n) {
+    const s = Math.round(n.t / ticksPerRow);
+    return { s: s, e: Math.max(s + 1, Math.round(n.end / ticksPerRow)), note: n.note, vel: n.vel };
+  });
+}
+
+/* MIDI note → SID note (0-95): minus 12, notes outside the range moved by octaves. */
+function _sidSmfToSid(midi) {
+  let n = (midi | 0) - 12;
+  while (n < 0) n += 12;
+  while (n > 95) n -= 12;
+  return n;
+}
+
+function _sidSmfPartName(part) {
+  return part.name || tf("sidSmfTrack", { n: part.track + 1 });
+}
+
+function _sidSmfPartLabel(part) {
+  return _sidSmfPartName(part) + " · " + tf("sidSmfChannel", { n: part.ch + 1 }) +
+    (part.drum ? " (" + t("sidSmfDrums") + ")" : "") + " · " + tf("sidSmfNotes", { n: part.notes.length });
+}
+
+/* Default choice: the first parts that are not on the drum channel, as many as there are voices. */
+function _sidSmfDefaultParts(parts, voices) {
+  const out = [];
+  parts.forEach(function(part, i) { if (!part.drum && out.length < voices) out.push(i); });
+  return out;
+}
+
+function _sidSmfTrackInst(name, i) {
+  const ins = _sidNewInst(name);
+  const wave = i % 3;
+  ins.pul = wave === 0; ins.saw = wave === 1; ins.tri = wave === 2;
+  return ins;
+}
+
+/* Builds a tune from the chosen parts (in voice order). opts: { voices, rowsPerBeat, fps,
+   perTrack (one new instrument per part, else every note uses opts.inst of opts.insts),
+   spread (the lower notes of a chord go to voices no part uses) }. In a part the highest
+   note of a chord wins, and a higher note cuts a held one. Null when nothing is left. */
+function _sidSmfBuildTune(smf, parts, opts) {
+  const voices = Math.max(1, opts.voices | 0), rpb = Math.max(1, opts.rowsPerBeat | 0);
+  const tpr = smf.division / rpb;
+  const used = parts.slice(0, voices);
+  const lanes = [], free = [];
+  for (let v = 0; v < voices; v++) { lanes.push([]); if (v >= used.length) free.push(v); }
+  const overlaps = function(lane, s, e) { return lane.some(function(n) { return n.s < e && s < n.e; }); };
+  let dropped = 0;
+  used.forEach(function(part, pi) {
+    const inst = opts.perTrack ? pi : opts.inst | 0;
+    const lane = lanes[pi];
+    const list = _sidSmfQuantize(part.notes, tpr).sort(function(a, b) { return a.s - b.s || b.note - a.note; });
+    list.forEach(function(n) {
+      n.note = _sidSmfToSid(n.note); n.inst = inst;
+      const cur = lane.length ? lane[lane.length - 1] : null;
+      if (!cur || cur.e <= n.s) { lane.push(n); return; }
+      if (n.s > cur.s && n.note > cur.note) { cur.e = n.s; lane.push(n); return; }
+      if (opts.spread) {
+        const v = free.find(function(x) { return !overlaps(lanes[x], n.s, n.e); });
+        if (v !== undefined) { lanes[v].push(n); return; }
+      }
+      dropped++;
+    });
+  });
+  let maxEnd = 0, maxStart = 0, count = 0;
+  lanes.forEach(function(lane) {
+    lane.sort(function(a, b) { return a.s - b.s; });
+    lane.forEach(function(n) { maxEnd = Math.max(maxEnd, n.e); maxStart = Math.max(maxStart, n.s); count++; });
+  });
+  if (!count) return null;
+  // a note-off exactly on the next pattern boundary does not get a pattern of its own
+  const totalRows = Math.ceil(Math.max(maxStart + 1, maxEnd) / _SID_ROWS) * _SID_ROWS;
+  const empty = function() { return { note: null, inst: 0, fx: null, fxval: 0 }; };
+  const cols = lanes.map(function(lane) {
+    const col = [];
+    for (let r = 0; r < totalRows; r++) col.push(empty());
+    lane.forEach(function(n) { col[n.s] = { note: n.note, inst: n.inst, fx: null, fxval: 0 }; });
+    // a note-off where a note ends and no other one starts
+    lane.forEach(function(n) {
+      if (n.e < totalRows && col[n.e].note == null && !col[n.e].fx) col[n.e] = { note: null, inst: 0, fx: "C", fxval: 0 };
+    });
+    return col;
+  });
+  // tempo changes: an F effect one row ahead sets the length of the next rows
+  const tempos = _sidSmfTempos(smf);
+  const speed = _sidSmfRowSpeed(tempos, 0, rpb, opts.fps || 50);
+  let cur = speed, speedSkipped = 0;
+  if (tempos.length > 1) {
+    for (let r = 1; r < totalRows; r++) {
+      const want = _sidSmfRowSpeed(tempos, r * tpr, rpb, opts.fps || 50);
+      if (want === cur) continue;
+      const v = cols.findIndex(function(col) { return !col[r - 1].fx; });
+      if (v < 0) { speedSkipped++; continue; }
+      cols[v][r - 1].fx = "F"; cols[v][r - 1].fxval = want;
+      cur = want;
+    }
+  }
+  const patterns = [], song = [], keys = {};
+  for (let r = 0; r < totalRows && song.length < 255; r += _SID_ROWS) {
+    const pat = cols.map(function(col) { return col.slice(r, r + _SID_ROWS); });
+    const key = JSON.stringify(pat);
+    if (keys[key] === undefined) { keys[key] = patterns.length; patterns.push(pat); }
+    song.push(keys[key]);
+  }
+  const insts = opts.perTrack
+    ? used.map(function(part, i) { return _sidSmfTrackInst(_sidSmfPartName(part), i); })
+    : opts.insts;
+  return { insts: insts, patterns: patterns, song: song, speed: speed, notes: count, dropped: dropped,
+    truncated: totalRows > 255 * _SID_ROWS, speedSkipped: speedSkipped };
+}
+
+/* The song as the player plays it, per voice: [{ t: frame, on, note, inst }]. A row's
+   note starts the note (and ends the one before), C releases the gate, F changes the row
+   length from the next row on, the instrument's gate timer releases the gate that many
+   frames before a row with a new (not legato) note. Wave table gate-off steps are not followed. */
+function _sidSmfVoiceEvents(tune) {
+  const patterns = tune.patterns || [];
+  const voices = patterns[0] ? patterns[0].length : 3;
+  const insts = tune.insts || [];
+  const song = tune.song && tune.song.length ? tune.song : [0];
+  const rows = [];
+  song.forEach(function(idx) {
+    const pat = patterns[idx | 0];
+    for (let r = 0; r < _SID_ROWS; r++) rows.push(pat ? pat.map(function(col) { return col ? col[r] : null; }) : []);
+  });
+  const start = [], len = [], after = [];
+  let spd = Math.max(1, Math.min(255, tune.speed | 0)), f = 0;
+  rows.forEach(function(row) {
+    start.push(f); len.push(spd);
+    row.forEach(function(c) { if (c && c.fx === "F" && c.fxval) spd = c.fxval & 0xFF; });
+    after.push(spd);
+    f += len[len.length - 1];
+  });
+  let notes = 0;
+  const out = [];
+  for (let v = 0; v < voices; v++) {
+    const list = [];
+    let gate = false, played = false, note = 0, inst = 0;
+    const off = function(at) {
+      if (!gate) return;
+      gate = false;
+      const prev = list[list.length - 1];
+      if (prev && prev.on && prev.t >= at) { list.pop(); notes--; return; }
+      list.push({ t: at, on: false, note: note, inst: inst });
+    };
+    rows.forEach(function(row, i) {
+      const c = row[v];
+      if (c && c.note != null) {
+        off(start[i]);
+        note = Math.max(0, Math.min(95, c.note | 0));
+        inst = (c.inst | 0) < insts.length ? c.inst | 0 : 0;
+        list.push({ t: start[i], on: true, note: note, inst: inst });
+        gate = true; played = true; notes++;
+      }
+      if (c && c.fx === "C") off(start[i]);
+      const next = rows[i + 1] ? rows[i + 1][v] : null;
+      const gt = played && insts[inst] ? Math.max(0, Math.min(15, insts[inst].gateTimer | 0)) : 0;
+      if (gt && gt <= len[i] && gt !== after[i] && next && next.note != null && next.fx !== "L") off(start[i] + len[i] - gt);
+    });
+    off(f);
+    out.push(list);
+  }
+  return { voices: out, notes: notes, frames: f };
+}
+
+/* Tune → SMF (format 1): a tempo track, then one track per voice on MIDI channel = voice.
+   One tick is one player frame: the division is the frames of a beat at the song's speed
+   (4 rows per beat, the BPM display), the tempo makes a beat last that many frames. */
+function _sidSmfFromTune(tune) {
+  const fps = tune.fps || 50, speed = Math.max(1, Math.min(255, tune.speed | 0));
+  const ev = _sidSmfVoiceEvents(tune);
+  const division = speed * _SID_ROWS_PER_BEAT;
+  const us = Math.round(division * 1e6 / fps);
+  const head = [];
+  if (tune.title) head.push({ t: 0, d: _sidSmfMeta(0x03, _sidSmfText(tune.title)) });
+  head.push({ t: 0, d: _sidSmfMeta(0x51, [(us >> 16) & 255, (us >> 8) & 255, us & 255]) });
+  head.push({ t: 0, d: _sidSmfMeta(0x58, [4, 2, 24, 8]) });
+  const tracks = [head];
+  ev.voices.forEach(function(list, v) {
+    const first = list.find(function(x) { return x.on; });
+    const ins = first ? (tune.insts || [])[first.inst] : null;
+    const name = ins && ins.name ? ins.name : tf("sidSmfVoiceName", { n: v + 1 });
+    const tr = [{ t: 0, d: _sidSmfMeta(0x03, _sidSmfText(name)) }];
+    let prog = -1;
+    list.forEach(function(x) {
+      if (x.on) {
+        if ((x.inst & 0x7F) !== prog) { prog = x.inst & 0x7F; tr.push({ t: x.t, d: [0xC0 | v, prog] }); }
+        tr.push({ t: x.t, d: [0x90 | v, x.note + 12, _SID_SMF_VEL] });
+      } else {
+        tr.push({ t: x.t, d: [0x80 | v, x.note + 12, 64] });
+      }
+    });
+    tracks.push(tr);
+  });
+  return { format: 1, division: division, tracks: tracks, notes: ev.notes };
+}
+
+function _sidSmfExport() {
+  const title = document.getElementById("sid-tune-title");
+  const smf = _sidSmfFromTune({ patterns: _sidPatterns, song: _sidSong, speed: _sidSpeed, insts: _sidInsts,
+    fps: _sidFps(), title: title ? title.textContent : "" });
+  if (!smf.notes) { showViceToast(t("sidSmfExportEmpty"), true); return; }
+  _saveBinFile(_sidSmfWrite(smf), "tune.mid");
+}
+
+let _sidSmfImportState = null;
+
+function _sidSmfVoicesSel() {
+  const el = document.getElementById("sid-import-midi-chips");
+  return el && el.value === "2" ? 6 : 3;
+}
+
+/* At most as many parts as voices: further boxes are disabled; Import needs one. */
+function _sidSmfLimitParts() {
+  const boxes = Array.from(document.querySelectorAll("#sid-import-midi-parts input[type=checkbox]"));
+  const max = _sidSmfVoicesSel();
+  let on = 0;
+  boxes.forEach(function(box) { if (box.checked && ++on > max) { box.checked = false; on--; } });
+  boxes.forEach(function(box) { box.disabled = !box.checked && on >= max; });
+  const label = document.getElementById("sid-import-midi-parts-label");
+  if (label) label.textContent = tf("sidSmfParts", { n: max });
+  const go = document.getElementById("sid-import-midi-go");
+  if (go) go.disabled = on === 0;
+}
+
+function _sidSmfOpenImport(bytes, fileName) {
+  let smf;
+  try { smf = _sidSmfParse(bytes); }
+  catch (err) { showViceToast(t((err && err.i18nKey) || "sidSmfErrNotMidi"), true); return; }
+  const parts = _sidSmfParts(smf);
+  if (!parts.length) { showViceToast(t("sidSmfNoNotes"), true); return; }
+  const dlg = document.getElementById("sid-import-midi-dialog");
+  if (!dlg) return;
+  const base = String(fileName || "").replace(/\.(mid|midi|smf|kar)$/i, "");
+  _sidSmfImportState = { smf: smf, parts: parts, title: (smf.tracks[0] && smf.tracks[0].name) || base };
+  document.getElementById("sid-import-midi-file").textContent = [base, smf.tracks[0] && smf.tracks[0].name]
+    .filter(function(x, i, all) { return x && all.indexOf(x) === i; }).join(" — ");
+  document.getElementById("sid-import-midi-chips").value = _sidVoiceCount() > 3 ? "2" : "1";
+  document.getElementById("sid-import-midi-status").textContent = "";
+  const list = document.getElementById("sid-import-midi-parts");
+  list.textContent = "";
+  const picked = _sidSmfDefaultParts(parts, _sidSmfVoicesSel());
+  parts.forEach(function(part, i) {
+    const row = document.createElement("label");
+    row.className = "me-check sid-import-midi-part";
+    const box = document.createElement("input");
+    box.type = "checkbox"; box.value = String(i); box.checked = picked.includes(i);
+    box.addEventListener("change", _sidSmfLimitParts);
+    const text = document.createElement("span");
+    text.textContent = _sidSmfPartLabel(part);
+    row.appendChild(box); row.appendChild(text);
+    list.appendChild(row);
+  });
+  _sidSmfLimitParts();
+  dlg.showModal();
+}
+
+function _sidSmfRunImport() {
+  const st = _sidSmfImportState, dlg = document.getElementById("sid-import-midi-dialog");
+  const status = document.getElementById("sid-import-midi-status");
+  if (!st || !dlg) return;
+  const picked = Array.from(document.querySelectorAll("#sid-import-midi-parts input[type=checkbox]"))
+    .filter(function(box) { return box.checked; })
+    .map(function(box) { return st.parts[box.value | 0]; });
+  if (!picked.length) { status.textContent = t("sidSmfNoneSelected"); return; }
+  const res = _sidSmfBuildTune(st.smf, picked, {
+    voices: _sidSmfVoicesSel(),
+    rowsPerBeat: parseInt(document.getElementById("sid-import-midi-rpb").value, 10) || 4,
+    fps: _sidFps(),
+    perTrack: document.getElementById("sid-import-midi-inst").value !== "current",
+    spread: !!document.getElementById("sid-import-midi-spread").checked,
+    inst: _sidInst, insts: _sidInsts,
+  });
+  if (!res) { status.textContent = t("sidSmfNoNotes"); return; }
+  dlg.close();
+  _sidSmfImportState = null;
+  res.vol = _sidVol(); res.vol2 = _sidVol2(); res.ntsc = _sidIsNtsc();
+  _sidApplyImportedTune(res, st.title);
+  let msg = tf("sidSmfImported", { notes: res.notes, pats: res.patterns.length, song: res.song.length, speed: res.speed });
+  if (res.dropped) msg += " " + tf("sidSmfDropped", { n: res.dropped });
+  if (res.speedSkipped) msg += " " + tf("sidSmfSpeedSkipped", { n: res.speedSkipped });
+  if (res.truncated) msg += " " + t("sidSmfTruncated");
+  showViceToast(msg, false, true);
+}
+
+
 function _sidExport(kind) {
   if (kind === "asm") return _sidExportAsmPlayable();
   // BASIC DATA dump (unchanged legacy path)
@@ -9406,6 +10232,12 @@ function setupSidEditor() {
   onId("sid-vkbd-metronome", "click", _sidToggleMetronome);
   onId("sid-pat-del", "click", _sidPatternDelete);
   onId("sid-record", "click", _sidToggleRecord);
+  // transport and undo buttons a MIDI controller's buttons / pads can press (right click → MIDI Learn)
+  ["sid-play", "sid-pause", "sid-stop", "sid-record", "sid-undo", "sid-redo",
+   "sid-roll-play", "sid-roll-stop", "sid-roll-undo", "sid-roll-redo",
+   "sid-vkbd-play", "sid-vkbd-stop", "sid-vkbd-record"].forEach(function(id) {
+    _sidMidiButtonRegister(document.getElementById(id));
+  });
   onId("sid-vkbd-record", "click", _sidToggleRecord);
   onId("sid-chord-preview", "click", _sidPreviewChord);
   onId("sid-arp-preview", "click", _sidPreviewArpeggio);
@@ -9433,7 +10265,9 @@ function setupSidEditor() {
     _sidMidiPoly = !!e.target.checked;
     try { localStorage.setItem("c64va-sid-midi-poly", _sidMidiPoly ? "1" : "0"); } catch (_) {}
   });
-  onId("sid-midi-input", "change", function(e) { _sidMidiSetInput(e.target.value); });
+  onId("sid-midi-input", "change", function(e) { _sidMidiSetInput(e.target.value, { user: true }); });
+  // the saved MIDI settings first (config file), then the automatic connect to the remembered input
+  _sidMidiSettingsRestore().then(function() { _sidMidiAutoConnect(); });
   onId("sid-vkbd-close", "click", function(){
     _sidCloseVirtualKeyboard();
   });
@@ -9527,6 +10361,19 @@ function setupSidEditor() {
   });
   onId("sid-import-sid-go", "click", function(){ _sidRunSidImport(); });
   onId("sid-import-sid-cancel", "click", function(){ document.getElementById("sid-import-sid-dialog")?.close(); });
+  // Standard MIDI File import / export
+  onId("sid-export-midi", "click", function(){ _sidSmfExport(); });
+  const sidMidFile = document.getElementById("sid-mid-file");
+  onId("sid-import-midi", "click", function(){ if (sidMidFile) sidMidFile.click(); });
+  if (sidMidFile) sidMidFile.addEventListener("change", function(e){
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(){ _sidSmfOpenImport(new Uint8Array(reader.result), file.name); };
+    reader.readAsArrayBuffer(file); e.target.value = "";
+  });
+  onId("sid-import-midi-chips", "change", function(){ _sidSmfLimitParts(); });
+  onId("sid-import-midi-go", "click", function(){ _sidSmfRunImport(); });
+  onId("sid-import-midi-cancel", "click", function(){ document.getElementById("sid-import-midi-dialog")?.close(); });
   if (sidBinFile) sidBinFile.addEventListener("change", function(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -9873,6 +10720,16 @@ function _sidApplyTranslations() {
   setText("#sid-import-goat", t("sidImportGoat"));
   setText("#sid-new-tune", t("sidNewTune"));
   setText("#sid-import-sid", t("sidImportSid"));
+  setText("#sid-import-midi", t("sidImportMidi"));
+  setText("#sid-import-midi-title", t("sidSmfImportTitle"));
+  setText("#sid-import-midi-rpb-label", t("sidSmfRowsPerBeat"));
+  setText("#sid-import-midi-chips-label", t("sidSmfChips"));
+  setText("#sid-import-midi-inst-label", t("sidSmfInstruments"));
+  setText("#sid-import-midi-inst-track", t("sidSmfInstPerTrack"));
+  setText("#sid-import-midi-inst-current", t("sidSmfInstCurrent"));
+  setText("#sid-import-midi-spread-label", t("sidSmfSpread"));
+  setText("#sid-import-midi-go", t("sidSmfGo"));
+  setText("#sid-import-midi-cancel", t("cancel"));
   setText("#sid-master-vol-lbl", t("sidMasterVolume"));
   setText("#sid-vkbd-inst-lbl", t("sidVkbdInstrumentLabel"));
   setText("#sid-lcd-pos-lbl", t("sidLcdPos"));
@@ -9965,6 +10822,7 @@ function _sidApplyTranslations() {
   setText("#sid-export-asm", t("sidExportAsm"));
   setText("#sid-export-ub", t("sidExportUb"));
   setText("#sid-export-psid", t("sidExportPsid"));
+  setText("#sid-export-midi", t("sidExportMidi"));
   setText(".sid-inst-row .sid-lbl", t("sidInstrumentLabel"));
   setAttr("#sid-inst-add", t("sidAddInstrument"));
   setAttr("#sid-inst-del", t("sidDeleteInstrument"));

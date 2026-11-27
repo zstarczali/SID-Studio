@@ -1,11 +1,14 @@
-VA SID STUDIO 1.8.5 - INSTALLATION GUIDE
+VA SID STUDIO 1.8.6 - INSTALLATION GUIDE
 ==================================
 
 This guide covers installation on Windows, Linux and macOS.
 
 Project: https://github.com/zstarczali/va-sid-editor
 
-New in 1.8.5: wave table steps with their own length, pulse width and
+New in 1.8.6: MIDI controllers on the knobs and on the Play, Stop,
+Record and Undo buttons (right-click → MIDI Learn), the MIDI input is
+remembered and connected at start, .mid import and export, and the
+Studio lettering on the splash and in About. 1.8.5: wave table steps with their own length, pulse width and
 filter (64 steps per table), and .sid import keeps speech and other
 GoatTracker table sounds. 1.8.4: the SID emulation is the va-sid library
 shared with C64 Visual Assembler (the sound does not change), and About

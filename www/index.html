@@ -232,14 +232,17 @@
             <button id="sid-inst-unused" type="button">Delete unused instruments</button>
             <button id="sid-import-goat" type="button">Import GoatTracker .sng…</button>
             <button id="sid-import-sid" type="button">Import .sid…</button>
+            <button id="sid-import-midi" type="button">Import MIDI (.mid)…</button>
             <div class="ed-file-sep"></div>
             <button id="sid-export-asm" type="button">Export asm</button>
             <button id="sid-export-ub" type="button">Export to UltimateBasic</button>
             <button id="sid-export-psid" type="button">Export .sid (PSID)…</button>
+            <button id="sid-export-midi" type="button">Export MIDI (.mid)…</button>
           </div>
           <input type="file" id="sid-bin-file" accept=".bin,application/octet-stream" hidden>
           <input type="file" id="sid-sng-file" accept=".sng" hidden>
           <input type="file" id="sid-sid-file" accept=".sid" hidden>
+          <input type="file" id="sid-mid-file" accept=".mid,.midi,.smf,.kar,audio/midi" hidden>
         </div>
         <span class="sid-title">SID EDITOR</span>
         <span id="sid-engine-name" class="sid-engine-name"></span>
@@ -660,6 +663,37 @@
     </div>
   </dialog>
 
+  <dialog id="sid-import-midi-dialog" class="app-confirm-dialog sid-import-sid-dialog sid-import-midi-dialog">
+    <div class="app-confirm-card">
+      <p id="sid-import-midi-title" class="app-confirm-msg sid-import-sid-title">Import MIDI</p>
+      <p id="sid-import-midi-file" class="sid-import-sid-tune"></p>
+      <p id="sid-import-midi-parts-label" class="sid-import-midi-parts-label">Tracks / channels</p>
+      <div id="sid-import-midi-parts" class="sid-import-midi-parts"></div>
+      <div class="sid-import-sid-fields">
+        <label id="sid-import-midi-rpb-label" for="sid-import-midi-rpb">Rows per beat</label>
+        <select id="sid-import-midi-rpb" class="sid-import-sid-num">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          <option value="4" selected>4</option><option value="6">6</option><option value="8">8</option>
+        </select>
+        <label id="sid-import-midi-chips-label" for="sid-import-midi-chips">SID chips</label>
+        <select id="sid-import-midi-chips" class="sid-import-sid-num">
+          <option value="1">1</option><option value="2">2</option>
+        </select>
+        <label id="sid-import-midi-inst-label" for="sid-import-midi-inst">Instruments</label>
+        <select id="sid-import-midi-inst" class="sid-import-sid-num">
+          <option id="sid-import-midi-inst-track" value="track" selected>One per track</option>
+          <option id="sid-import-midi-inst-current" value="current">Current instrument</option>
+        </select>
+      </div>
+      <label class="me-check sid-import-midi-check"><input id="sid-import-midi-spread" type="checkbox"><span id="sid-import-midi-spread-label">Spread chords to free voices</span></label>
+      <p id="sid-import-midi-status" class="sid-import-sid-status"></p>
+      <div class="app-confirm-buttons">
+        <button id="sid-import-midi-go" class="primary" type="button">Import</button>
+        <button id="sid-import-midi-cancel" class="secondary" type="button">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="sid-import-sid-dialog" class="app-confirm-dialog sid-import-sid-dialog">
     <div class="app-confirm-card">
       <p id="sid-import-sid-title" class="app-confirm-msg sid-import-sid-title">Import .sid</p>
@@ -743,7 +777,7 @@
         <div class="about-logo">
           <img src="assets/logo-about.png" alt="VA SID Studio" width="160" height="160">
         </div>
-        <h2 class="about-title">VA SID Studio</h2>
+        <h2 class="about-title">VA SID <span class="va-studio about-studio">Studio</span></h2>
         <p class="about-version" id="about-version">v?</p>
         <p class="about-version" id="about-vma-version"><span id="about-vma-version-label">VMA compiler version:</span> <span id="about-vma-version-value">v?</span></p>
         <p class="about-version" id="about-va-sid-version"><span id="about-va-sid-version-label">VA-SID version:</span> <span id="about-va-sid-version-value">v?</span></p>
