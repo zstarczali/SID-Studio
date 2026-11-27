@@ -4512,7 +4512,7 @@ dependencies = [
 
 [[package]]
 name = "va-sid-studio"
-version = "1.8.5"
+version = "1.8.6"
 dependencies = [
  "flate2",
  "reqwest 0.12.28",

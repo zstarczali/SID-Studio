@@ -1,6 +1,6 @@
 # VA SID Studio — User Manual
 
-**Version 1.8.5**
+**Version 1.8.6**
 
 VA SID Studio is a Commodore 64 SID music player and tracker for the desktop. It plays `.sid` files, including the whole High Voltage SID Collection, and Amiga and PC tracker modules, including the Modland collection, and lets you write tunes that run on a real C64. It is the SID part of [C64 Visual Assembler](https://www.c64va.pro/) as a standalone app.
 
@@ -483,7 +483,15 @@ The **Virtual keyboard** button opens VA-VK, a piano of 2, 3 or 4 octaves that p
 
 Press **Connect MIDI** next to the instrument name, then choose the input in the **MIDI** list. Notes play the current instrument, and they are written into the tracker while recording or with *Insert into tracker* on. The lamp flashes on every incoming message.
 
+The app remembers the connection and the input you chose. At the next start it connects by itself, without a message, and selects that input again, by its id or, if the system gave it a new id, by its name. If the input is not plugged in, the list stays on *No MIDI input* (no other input is selected in its place) until you plug it in. To stop connecting at start, choose *No MIDI input* in the list; choosing an input or pressing **Connect MIDI** turns it back on.
+
 With **Poly record** on, the keys you hold while recording go to voices of their own, from the selected voice on: a chord of three lands on three voices. Releasing a key writes a note-off, and when every voice is held, the oldest key gives up its voice.
+
+**Hardware knobs and faders.** The knobs on screen (the instrument parameters, the master volume, the VA-VK instrument knob, the player volume) can follow the knobs and faders of a MIDI controller. Right-click a knob, choose **MIDI Learn (hardware knob)** (the knob pulses), then turn the controller's knob or fader: the first Control Change message it sends maps it to the knob, which then shows the CC number in a small badge. The whole range of the controller (0-127) covers the whole range of the knob; the VA-VK instrument knob steps through the instruments. A knob follows its controller only while its window is open. Each knob has one controller and each controller drives one knob; learning again replaces the old mapping. The same menu has **Cancel MIDI Learn**, **Remove mapping** and **Remove all MIDI mappings**. The mappings are kept between sessions.
+
+**Hardware buttons and pads.** The same way, right-click Play, Pause, Stop, Record, Undo or Redo (on the toolbar, in the piano roll or in VA-VK) → **MIDI Learn (hardware button)**, then press a button or pad on your MIDI controller: a transport button (Control Change) or a pad (a note, which then no longer plays) presses that button, once per press, while it is enabled. The mapping is saved with the knob mappings.
+
+The mappings, the remembered input and the connect at start are also kept in the app's config file, so they stay after a reinstall or a new web view profile.
 
 MIDI depends on the web view of your system. Where it is not available, the app says so when you press **Connect MIDI**.
 
@@ -512,11 +520,13 @@ MIDI depends on the web view of your system. Where it is not available, the app 
 | **Delete unused instruments** | Removes every instrument no note plays, and renumbers the rest. |
 | **Import GoatTracker .sng…** | Replaces the current tune with a GoatTracker 2 song. |
 | **Import .sid…** | Turns a PSID / RSID file into an editable tune in place of the current one. |
+| **Import MIDI (.mid)…** | Builds a tune from a Standard MIDI File in place of the current one. |
 | **Export asm** | Copies the complete 6502 source to the clipboard. |
 | **Export to UltimateBasic** | Copies a `tune … end` block to the clipboard. |
 | **Export .sid (PSID)…** | Saves a `.sid` file that plays in any SID player. |
+| **Export MIDI (.mid)…** | Saves the song as a Standard MIDI File, one track per voice. |
 
-**The two imports replace the current tune.** Save it first if you need it.
+**The imports replace the current tune.** Save it first if you need it, or press **Undo** afterwards.
 
 ### Import .sid
 
@@ -539,6 +549,23 @@ Reads GoatTracker 2 songs (GTS3–GTS5). The two trackers work differently, so t
 - AD / SR, first wave, gate timer and hard restart are taken over. The wavetable becomes the wave / arpeggio table, the pulse table PWM, the filter table the filter settings, and the speed table entry the instrument's vibrato.
 - Key off becomes a note-off, portamento `U` / `D` (at most 255 per row) and tempo `F`. Toneporta becomes a plain note, and other commands are dropped.
 - Only the first subtune is imported.
+
+### Import and export MIDI
+
+**Export MIDI (.mid)…** saves the song, in song order, as a Standard MIDI File (format 1): a tempo track and one track per voice (3, or 6 with two SIDs) on MIDI channels 1–6. MIDI note = SID note + 12, as with the MIDI input.
+
+- Notes start and end as the player plays them: a new note ends the one before, a note-off (`C`) and the instrument's gate timer release the gate, and `F` changes the row length. Gate-off steps of a wave table are not followed.
+- One MIDI tick is one player frame. The tempo comes from the speed and PAL / NTSC, with 4 rows to a beat, as in the BPM display.
+- A track is named after the instrument of its first note (or *Voice N*); instrument changes become program changes (program = instrument number).
+
+**Import MIDI (.mid)…** reads format 0 and format 1 files whose timing is in ticks per quarter note (SMPTE timing is refused with a message). A dialog lists every track / channel that has notes:
+
+- Tick up to 3 of them (6 with **SID chips** set to 2), one per voice in list order. The first ones are ticked, except the drum channel 10.
+- **Rows per beat** is the quantize grid (default 4): note starts and ends are rounded to the nearest row, and a note lasts at least one row. A note-off is written where a note ends and no other one starts.
+- In one track the highest note of a chord is kept, and a higher note cuts a held one. **Spread chords to free voices** moves the other notes to voices that no ticked track uses.
+- The speed comes from the first tempo; later tempo changes become `F` effects one row ahead.
+- **Instruments:** one new instrument per track (pulse, saw and triangle in turn, named after the track), or the current instrument for every note.
+- The rows are cut into 32-row patterns, identical ones shared, up to 255 song steps. A message tells how many notes came in and what was dropped.
 
 ### Export limits
 

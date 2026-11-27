@@ -192,6 +192,27 @@ fn queue_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
     let _ = app.emit("files-opened", ());
 }
 
+/// The MIDI settings (knob / button mappings, the remembered input, automatic connect), kept in the
+/// config file next to the WebView's localStorage, so they survive a cleared WebView profile.
+#[tauri::command]
+fn get_midi_settings(app: AppHandle) -> serde_json::Value {
+    let cfg = read_config(&app);
+    if cfg["midi"].is_object() { cfg["midi"].clone() } else { serde_json::Value::Null }
+}
+
+#[tauri::command]
+fn save_midi_settings(app: AppHandle, settings: serde_json::Value) {
+    if !settings.is_object() {
+        return;
+    }
+    let mut cfg = read_config(&app);
+    if !cfg.is_object() {
+        cfg = serde_json::json!({});
+    }
+    cfg["midi"] = settings;
+    write_config(&app, &cfg);
+}
+
 #[tauri::command]
 fn take_opened_files() -> Vec<serde_json::Value> {
     let paths: Vec<PathBuf> = OPENED_FILES
@@ -312,6 +333,8 @@ pub fn run() {
             vma_build_raw,
             save_bin,
             take_opened_files,
+            get_midi_settings,
+            save_midi_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

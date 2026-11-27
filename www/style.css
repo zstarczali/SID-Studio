@@ -1590,6 +1590,22 @@ button:focus-visible {
 }
 .websid-play-knob svg { display: block; width: 100%; height: 100%; }
 .websid-play-knob:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent); }
+/* a knob a MIDI controller drives: its CC number as a badge; MIDI Learn waiting: a pulsing ring */
+.sid-knob--midi, .sid-knob--learning { position: relative; }
+.sid-knob--midi::after {
+  content: attr(data-midi-cc);
+  position: absolute; right: -6px; bottom: -4px;
+  min-width: 12px; padding: 0 2px; border-radius: 6px;
+  font: 600 8px/11px var(--font-mono, monospace); text-align: center;
+  color: var(--bg, #000); background: var(--secondary);
+  pointer-events: none;
+}
+.sid-knob--learning { animation: sid-knob-learn 0.9s ease-in-out infinite; }
+@keyframes sid-knob-learn {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--secondary) 25%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary) 85%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .sid-knob--learning { animation: none; box-shadow: 0 0 0 3px var(--secondary); } }
 .websid-play-knob-track { fill: none; stroke: var(--panel-border); stroke-width: 3.5; stroke-linecap: round; }
 .websid-play-knob-value { fill: none; stroke: var(--primary); stroke-width: 3.5; stroke-linecap: round; }
 .websid-play-knob-body { fill: var(--control-bg); stroke: var(--panel-border); stroke-width: 1; }
@@ -1761,6 +1777,14 @@ button:focus-visible {
 .sid-import-sid-num { box-sizing: border-box; width: 100%; height: 28px; min-height: 0; padding: 3px 6px; }
 .sid-import-sid-dialog button:disabled, .sid-import-sid-num:disabled { opacity: 0.5; cursor: default; pointer-events: none; }
 .sid-import-sid-status { margin: 0; font-size: 0.75rem; color: var(--muted); overflow-wrap: anywhere; }
+.sid-import-midi-dialog .sid-import-sid-fields { grid-template-columns: 1fr 170px; }
+.sid-import-midi-parts-label { margin: 0 0 -6px; font-size: 0.82rem; }
+.sid-import-midi-parts { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; padding: 6px 8px; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 6px; font-size: 0.8rem; }
+.sid-import-midi-part, .sid-import-midi-check { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; cursor: pointer; }
+.sid-import-midi-part input:disabled + span { opacity: 0.5; }
+.sid-import-midi-part, .sid-import-midi-check { color: inherit; }
+.sid-import-midi-part > span, .sid-import-midi-check > span { flex: 1; min-width: 0; }
+.sid-import-midi-part input:disabled { cursor: default; opacity: 0.5; }
 dialog { -webkit-user-select: none; user-select: none; }
 dialog img, dialog a { -webkit-user-drag: none; user-drag: none; }
 .sid-roll { width: 900px; height: 400px; min-width: 520px; min-height: 240px; z-index: 31; }
@@ -2449,6 +2473,23 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
   font-weight: 700;
   color: var(--text);
 }
+/* "Studio" in script, as on the splash and in C64 Visual Assembler's About */
+@font-face {
+  font-family: "Pacifico";
+  src: url("assets/Pacifico-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+.va-studio {
+  font-family: "Pacifico", cursive;
+  line-height: 1;
+  color: #ff7a3d;
+  transform: rotate(-6deg);
+  text-shadow: 0 0 6px color-mix(in srgb, #ff7a3d 40%, transparent);
+  white-space: nowrap;
+  user-select: none;
+}
+html[data-theme="c64"] .va-studio { color: #ffffff; text-shadow: none; }
+.about-title .about-studio { display: inline-block; margin: 0 0 0 4px; font-size: 1.35rem; font-weight: 400; vertical-align: 2px; }
 .about-version {
   margin: 0;
   font-family: "IBM Plex Mono", monospace;
@@ -2533,9 +2574,12 @@ html:has(#splash-screen) { overflow: hidden; }
 [data-theme="beige"] .splash-panel { border-color: color-mix(in srgb, var(--text) 45%, var(--panel)); }
 .splash-image {
   flex: 0 0 auto;
-  width: min(450px, calc(92vw - 64px));
-  max-width: 100%; max-height: 340px;
-  height: auto;
+  /* 30% larger than the old 340 px; the PNG's transparent top/bottom (190 / 51 of 900 px) is pulled in
+     with negative margins, so the panel keeps its 640x480 size */
+  --splash-size: min(442px, calc(92vw - 64px));
+  width: var(--splash-size); height: var(--splash-size);
+  max-width: none; max-height: none;
+  margin: calc(var(--splash-size) * -0.211) 0 calc(var(--splash-size) * -0.057);
   object-fit: contain;
   display: block;
 }
