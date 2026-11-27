@@ -2580,6 +2580,8 @@ html:has(#splash-screen) { overflow: hidden; }
   width: var(--splash-size); height: var(--splash-size);
   max-width: none; max-height: none;
   margin: calc(var(--splash-size) * -0.211) 0 calc(var(--splash-size) * -0.057);
+  /* 50 px lower in the panel; relative, so the loader and the texts stay where they are */
+  position: relative; top: 50px;
   object-fit: contain;
   display: block;
 }
